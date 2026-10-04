@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#f8f6fd">
 <meta name="color-scheme" content="light dark">
 <title>YiTetris Web · 俄罗斯方块</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='18' fill='%237c5cd6'/><rect x='14' y='14' width='16' height='16' rx='5' fill='white'/><rect x='34' y='14' width='16' height='16' rx='5' fill='white' opacity='.72'/><rect x='14' y='34' width='16' height='16' rx='5' fill='white' opacity='.72'/><rect x='34' y='34' width='16' height='16' rx='5' fill='white'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='18' fill='%237c5cd6'/><g transform='translate(10.4 10.4) scale(1.8)'><path fill='white' d='M10.7 4.6H20.7A2.4 2.4 0 0 1 23.1 7V9.6A2.4 2.4 0 0 1 20.7 12H17.7A2 2 0 0 0 15.7 14V17A2.4 2.4 0 0 1 13.3 19.4H3.3A2.4 2.4 0 0 1 .9 17V14.4A2.4 2.4 0 0 1 3.3 12H6.3A2 2 0 0 0 8.3 10V7A2.4 2.4 0 0 1 10.7 4.6Z'/></g></svg>">
 <script>
 /* 首屏防闪：在渲染前套用本地保存的主题与配色 */
 (function(){try{
@@ -41,7 +41,11 @@ html[data-theme="light"]{
   --accent-soft-text:hsl(var(--h) 55% 30%);
   --on-accent:#fff;
   --board-bg:hsl(var(--h) 26% 90%);
-  --danger:hsl(2 72% 52%);
+  --logo-bg:hsl(var(--h) 55% 57%);
+  --logo-fg:#fff;
+  --danger:hsl(2 72% 46%);
+  --danger-line:hsl(4 62% 58%);
+  --danger-bg:hsl(6 50% 94%);
   --shadow:0 10px 28px hsl(var(--h) 40% 30% / .12);
   --shadow-sm:0 4px 14px hsl(var(--h) 40% 30% / .10);
 }
@@ -62,7 +66,11 @@ html[data-theme="dark"]{
   --accent-soft-text:hsl(var(--h) 85% 90%);
   --on-accent:hsl(var(--h) 62% 12%);
   --board-bg:hsl(var(--h) 14% 13%);
-  --danger:hsl(4 82% 68%);
+  --logo-bg:var(--accent);
+  --logo-fg:var(--on-accent);
+  --danger:hsl(4 82% 72%);
+  --danger-line:hsl(4 54% 54%);
+  --danger-bg:hsl(6 16% 13%);
   --shadow:0 14px 34px hsl(var(--h) 60% 2% / .55);
   --shadow-sm:0 6px 18px hsl(var(--h) 60% 2% / .45);
 }
@@ -96,13 +104,13 @@ button{font-family:inherit;font-weight:inherit}
 /* ============ 顶栏 ============ */
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px 2px 16px;margin-left:auto;margin-right:auto}
 .brand{display:flex;align-items:center;gap:11px;min-width:0}
+/* 品牌标识：Material You 的实色容器 —— 无渐变、无彩色投影，靠色调层级说话 */
 .logo{
-  width:44px;height:44px;border-radius:14px;display:grid;place-items:center;color:#fff;flex:0 0 auto;
-  background:linear-gradient(150deg,hsl(var(--h) 80% 72%),hsl(var(--h) 62% 45%));
-  box-shadow:0 7px 18px hsl(var(--h) 60% 40% / .30);
-  transition:background .4s var(--ease),box-shadow .4s var(--ease);
+  width:44px;height:44px;border-radius:15px;display:grid;place-items:center;flex:0 0 auto;
+  background:var(--logo-bg);color:var(--logo-fg);
+  transition:background .4s var(--ease),color .4s var(--ease);
 }
-.logo svg{width:24px;height:24px;fill:currentColor;display:block}
+.logo svg{width:25px;height:25px;fill:currentColor;display:block}
 .brand-name{font-size:22px;font-weight:800;letter-spacing:.2px;white-space:nowrap}
 .pill{
   font-size:11px;font-weight:800;line-height:1;padding:4px 9px;border-radius:999px;margin-left:9px;
@@ -186,7 +194,7 @@ html[data-theme="dark"] .icon-btn .ic-moon{display:none}
 .round-btn:hover{background:var(--surface-2)}
 .round-btn:active{transform:scale(.95)}
 .round-btn svg{width:25px;height:25px;fill:currentColor;display:block}
-.round-btn.primary{background:var(--accent);color:var(--on-accent);box-shadow:0 8px 20px hsl(var(--h) 55% 35% / .28)}
+.round-btn.primary{background:var(--accent);color:var(--on-accent)}
 .round-btn.primary:hover{background:var(--accent-press)}
 
 /* ============ 棋盘 ============ */
@@ -195,7 +203,8 @@ html[data-theme="dark"] .icon-btn .ic-moon{display:none}
   background:var(--board-bg);border-radius:var(--r-xl);padding:10px;
   transition:background .4s var(--ease),box-shadow .35s var(--ease);
 }
-.board-wrap.danger{box-shadow:0 0 0 2.5px var(--danger),0 10px 26px hsl(var(--h) 60% 30% / .18)}
+/* 危险提示：Material You 的「错误轮廓 + 容器微染」，不用高饱和粗描边 */
+.board-wrap.danger{background:var(--danger-bg);box-shadow:0 0 0 2px var(--danger-line)}
 #board{display:block;width:100%;aspect-ratio:1/1;border-radius:var(--r-md);touch-action:none;cursor:default}
 .board-wrap.danger #board{cursor:pointer}
 .toast{
@@ -221,7 +230,7 @@ html[data-theme="dark"] .icon-btn .ic-moon{display:none}
 html[data-theme="light"] .overlay{background:hsl(var(--h) 40% 96% / .58)}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 .ovl-card{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;width:100%;max-width:250px}
-.ovl-icon{width:54px;height:54px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:var(--on-accent);box-shadow:var(--shadow-sm)}
+.ovl-icon{width:54px;height:54px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:var(--on-accent)}
 .ovl-icon svg{width:27px;height:27px;fill:currentColor}
 .ovl-title{margin:2px 0 0;font-size:22px;font-weight:800;color:var(--text)}
 .ovl-sub{margin:0;font-size:13.5px;font-weight:700;color:var(--text-dim);line-height:1.7}
@@ -383,8 +392,8 @@ kbd{
 @media (max-width:899px) and (max-height:720px){
   .app{padding:10px 14px 18px}
   .topbar{padding:2px 0 10px}
-  .logo{width:38px;height:38px;border-radius:12px}
-  .logo svg{width:21px;height:21px}
+  .logo{width:38px;height:38px;border-radius:13px}
+  .logo svg{width:22px;height:22px}
   .brand-name{font-size:20px}
   .hero h1{font-size:26px}
   .layout{gap:11px}
@@ -411,8 +420,8 @@ kbd{
 @media (max-width:380px){
   .app{padding:12px 12px 28px}
   .brand{gap:8px}
-  .logo{width:38px;height:38px;border-radius:12px}
-  .logo svg{width:21px;height:21px}
+  .logo{width:38px;height:38px;border-radius:13px}
+  .logo svg{width:22px;height:22px}
   .brand-name{font-size:19px}
   .pill{margin-left:6px;padding:3px 7px;font-size:10px;vertical-align:2px}
   .icon-btn{width:38px;height:38px}
@@ -455,7 +464,8 @@ kbd{
 <svg class="sprite" aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden" xmlns="http://www.w3.org/2000/svg"><defs>
   <!-- 图标唯一正本：全站图标都定义在这里，其余位置一律以 use 引用 #i-* -->
   <!-- 品牌 -->
-  <symbol id="i-logo" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="2.5"/><rect x="13" y="3" width="8" height="8" rx="2.5" opacity=".68"/><rect x="3" y="13" width="8" height="8" rx="2.5" opacity=".68"/><rect x="13" y="13" width="8" height="8" rx="2.5"/></symbol>
+  <!-- S 型四格骨牌剪影：整块连通、圆角统一，区别于 Yi2048 的「四宫格」标识 -->
+  <symbol id="i-logo" viewBox="0 0 24 24"><path d="M10.7 4.6H20.7A2.4 2.4 0 0 1 23.1 7V9.6A2.4 2.4 0 0 1 20.7 12H17.7A2 2 0 0 0 15.7 14V17A2.4 2.4 0 0 1 13.3 19.4H3.3A2.4 2.4 0 0 1 .9 17V14.4A2.4 2.4 0 0 1 3.3 12H6.3A2 2 0 0 0 8.3 10V7A2.4 2.4 0 0 1 10.7 4.6Z"/></symbol>
   <!-- 主题 -->
   <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.3"/><g><rect x="11" y="1.1" width="2" height="3.7" rx="1"/><rect x="11" y="1.1" width="2" height="3.7" rx="1" transform="rotate(45 12 12)"/><rect x="11" y="1.1" width="2" height="3.7" rx="1" transform="rotate(90 12 12)"/><rect x="11" y="1.1" width="2" height="3.7" rx="1" transform="rotate(135 12 12)"/><rect x="11" y="1.1" width="2" height="3.7" rx="1" transform="rotate(180 12 12)"/><rect x="11" y="1.1" width="2" height="3.7" rx="1" transform="rotate(225 12 12)"/><rect x="11" y="1.1" width="2" height="3.7" rx="1" transform="rotate(270 12 12)"/><rect x="11" y="1.1" width="2" height="3.7" rx="1" transform="rotate(315 12 12)"/></g></symbol>
   <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
@@ -481,7 +491,7 @@ kbd{
   <symbol id="i-info" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></symbol>
   <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M19 5h-2V3H7v2H5c-1.1 0-2 .9-2 2v1c0 2.55 1.92 4.63 4.39 4.94.63 1.5 1.98 2.63 3.61 2.96V19H7v2h10v-2h-4v-3.1c1.63-.33 2.98-1.46 3.61-2.96C19.08 12.63 21 10.55 21 8V7c0-1.1-.9-2-2-2zM5 8V7h2v3.82C5.84 10.4 5 9.3 5 8zm14 0c0 1.3-.84 2.4-2 2.82V7h2v1z"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></symbol>
-  <!-- 注：favicon 是 data URI，必须自带一份 4 格 logo，无法引用 sprite -->
+  <!-- 注：favicon 是 data URI，必须自带一份 S 型骨牌 logo，无法引用 sprite -->
 </defs></svg>
 
 
@@ -706,16 +716,18 @@ let theme='light', accentId='purple', accentH=266, C=null;
 
 function themeColors(){
   const h=accentH;
+  /* Material You：方块是「实色色调块」，不做渐变/高光/投影；
+     层级完全交给色调（tone）与留白，ghostA 是落点虚影的不透明度。 */
   if(theme==='dark') return {
     boardBg:'hsl('+h+', 14%, 13%)', cellBg:'hsl('+h+', 13%, 18%)',
-    sat:64, lig:67,
-    ghost:'hsla('+h+', 60%, 80%, .12)', ghostLine:'hsla('+h+', 70%, 86%, .34)',
+    sat:62, lig:68,
+    ghostA:0.17, ghostLineL:72, ghostLineA:0.62, slot:'hsla('+h+', 35%, 72%, .13)',
     flash:'rgba(255,255,255,.9)', flashText:'#fff'
   };
   return {
     boardBg:'hsl('+h+', 26%, 90%)', cellBg:'hsl('+h+', 30%, 95%)',
-    sat:56, lig:52,
-    ghost:'hsla('+h+', 50%, 45%, .10)', ghostLine:'hsla('+h+', 55%, 40%, .30)',
+    sat:58, lig:56,
+    ghostA:0.20, ghostLineL:52, ghostLineA:0.70, slot:'hsla('+h+', 32%, 48%, .14)',
     flash:'rgba(255,255,255,.95)', flashText:'#1b1722'
   };
 }
@@ -1037,29 +1049,37 @@ function sizeAll(){
 }
 
 /* ---------- 绘制 ---------- */
+/* 格子几何：统一的内缩与圆角，棋盘底格 / 方块 / 虚影三者共用一套比例 */
+const GAP=0.065, RAD=0.30;
+function cellRect(x,y,size){
+  const pad=Math.max(1,size*GAP);
+  return {x:x+pad, y:y+pad, s:size-pad*2, r:(size-pad*2)*RAD};
+}
 function drawTile(c,x,y,size,hue,alpha){
-  const pad=Math.max(1,size*0.055), rad=size*0.26;
-  const x0=x+pad, y0=y+pad, s=size-pad*2;
-  if(s<=2) return;
-  const gr=c.createLinearGradient(x0,y0,x0,y0+s);
-  gr.addColorStop(0,'hsla('+hue+', '+(C.sat+8)+'%, '+(C.lig+11)+'%, '+alpha+')');
-  gr.addColorStop(1,'hsla('+hue+', '+(C.sat-2)+'%, '+(C.lig-7)+'%, '+alpha+')');
-  c.fillStyle=gr;
-  rr(c,x0,y0,s,s,rad); c.fill();
-  c.fillStyle='hsla('+hue+', 100%, 97%, '+(0.20*alpha)+')';
-  rr(c,x0+s*0.19,y0+s*0.15,s*0.62,s*0.15,rad*0.55); c.fill();
+  const g=cellRect(x,y,size);
+  if(g.s<=2) return;
+  c.fillStyle='hsla('+hue+', '+C.sat+'%, '+C.lig+'%, '+alpha+')';
+  rr(c,g.x,g.y,g.s,g.s,g.r); c.fill();
 }
 function drawGhostTile(c,x,y,size,hue){
-  const pad=Math.max(1,size*0.055), rad=size*0.26;
-  const x0=x+pad, y0=y+pad, s=size-pad*2;
-  c.fillStyle=C.ghost;
-  rr(c,x0,y0,s,s,rad); c.fill();
+  const g=cellRect(x,y,size);
+  if(g.s<=2) return;
+  /* 虚影 = 同色相的低色调块 + 实线轮廓（Material You 的 outline 角色），
+     取消原先的虚线描边与高光，和实心方块保持同一套纯色面语言 */
+  c.fillStyle='hsla('+hue+', '+C.sat+'%, '+C.lig+'%, '+C.ghostA+')';
+  rr(c,g.x,g.y,g.s,g.s,g.r); c.fill();
+  const lw=Math.max(1.3,size*0.075);
   c.save();
-  c.strokeStyle=C.ghostLine;
-  c.lineWidth=Math.max(1.4,size*0.055);
-  if(c.setLineDash) c.setLineDash([size*0.2,size*0.16]);
-  rr(c,x0,y0,s,s,rad); c.stroke();
+  c.strokeStyle='hsla('+hue+', '+C.sat+'%, '+C.ghostLineL+'%, '+C.ghostLineA+')';
+  c.lineWidth=lw;
+  rr(c,g.x+lw/2,g.y+lw/2,g.s-lw,g.s-lw,Math.max(1,g.r-lw/2)); c.stroke();
   c.restore();
+}
+function drawSlot(c,x,y,size){
+  const g=cellRect(x,y,size);
+  if(g.s<=2) return;
+  c.fillStyle=C.slot;
+  rr(c,g.x,g.y,g.s,g.s,g.r); c.fill();
 }
 function render(){
   const c=boardCv&&boardCv._ctx;
@@ -1069,7 +1089,8 @@ function render(){
   c.fillStyle=C.cellBg;
   for(let r=0;r<ROWS;r++){
     for(let col=0;col<COLS;col++){
-      rr(c,col*cell+cell*0.055,r*cell+cell*0.055,cell*0.89,cell*0.89,cell*0.26);
+      const g=cellRect(col*cell,r*cell,cell);
+      rr(c,g.x,g.y,g.s,g.s,g.r);
       c.fill();
     }
   }
@@ -1090,18 +1111,14 @@ function render(){
         drawGhostTile(c,bx*cell,by*cell,cell,hue);
       }
     }
+    /* 当前方块与已落定方块使用同一套实色块：不加投影，避免拟物质感 */
     const m=SHAPES[G.cur.type][G.cur.rot], hue=pieceHue(G.cur.type);
-    c.save();
-    c.shadowColor='hsla('+hue+', 70%, 40%, .35)';
-    c.shadowBlur=cell*0.28;
-    c.shadowOffsetY=cell*0.06;
     for(let r=0;r<m.length;r++) for(let col=0;col<m[r].length;col++){
       if(!m[r][col]) continue;
       const by=G.cur.y+r, bx=G.cur.x+col;
       if(by<0) continue;
       drawTile(c,bx*cell,by*cell,cell,hue,1);
     }
-    c.restore();
   }
   if(G.status==='clearing'&&G.clear){
     const k=clamp(G.clear.t/CLEAR_ANIM,0,1);
@@ -1109,8 +1126,9 @@ function render(){
     c.globalAlpha=0.92*(1-k*0.55);
     for(let i=0;i<G.clear.rows.length;i++){
       const r=G.clear.rows[i];
+      const pad=Math.max(1,cell*GAP), s=cell-pad*2;
       c.fillStyle=C.flash;
-      rr(c,cell*0.055,r*cell+cell*0.055,w-cell*0.11,cell*0.89,cell*0.26);
+      rr(c,pad,r*cell+pad,w-pad*2,s,s*RAD);
       c.fill();
     }
     c.restore();
@@ -1152,18 +1170,9 @@ function renderPreviews(){
     if(G.hold){
       drawPieceBox(ch,G.hold,0,0,holdCv._w,holdCv._h,cell);
     }else{
-      /* 空态：虚线方框占位（与棋盘落点虚影同一视觉语言） */
-      const box=Math.max(cell*2.6,Math.min(holdCv._w,holdCv._h)*0.46);
-      const x=(holdCv._w-box)/2, y=(holdCv._h-box)/2;
-      const rad=box*0.24;
-      ch.fillStyle=C.ghost;
-      rr(ch,x,y,box,box,rad); ch.fill();
-      ch.save();
-      ch.strokeStyle=C.ghostLine;
-      ch.lineWidth=Math.max(1.6,box*0.055);
-      if(ch.setLineDash) ch.setLineDash([box*0.2,box*0.16]);
-      rr(ch,x,y,box,box,rad); ch.stroke();
-      ch.restore();
+      /* 空态：实色低调块占位（与棋盘底格同一视觉语言，不用虚线） */
+      const box=Math.max(cell*2.6,Math.min(holdCv._w,holdCv._h)*0.5);
+      drawSlot(ch,(holdCv._w-box)/2,(holdCv._h-box)/2,box);
     }
   }
   if(cn&&nextCv._w){
@@ -1609,5 +1618,5 @@ else init();
 
 })();
 </script>
-<!-- 已移除：抓取页面时被注入的 Cloudflare 校验脚本（本地打开会 404，与游戏无关） --></body>
+</body>
 </html>
