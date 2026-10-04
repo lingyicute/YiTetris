@@ -15,6 +15,8 @@
   document.documentElement.setAttribute('data-theme', t);
   var a=null; try{a=JSON.parse(localStorage.getItem('yitetris.accent'));}catch(e){}
   if(a && typeof a.h==='number'){ document.documentElement.style.setProperty('--h', a.h); }
+  var sk=null; try{sk=JSON.parse(localStorage.getItem('yitetris.skin'));}catch(e){}
+  document.documentElement.setAttribute('data-skin', sk==='classic' ? 'classic' : 'flat');
 }catch(e){}})();
 </script>
 <style>
@@ -149,7 +151,7 @@ html[data-theme="dark"] .icon-btn .ic-moon{display:none}
 .sw svg{width:20px;height:20px;fill:none;stroke:rgba(24,18,34,.82);stroke-width:2.8;stroke-linecap:round;stroke-linejoin:round;opacity:0;transition:opacity .2s var(--ease)}
 .sw.on svg{opacity:1}
 .sw.on{box-shadow:0 0 0 3px var(--sheet),0 0 0 5px currentColor}
-.menu{min-width:212px;padding:8px}
+.menu{min-width:228px;padding:8px}
 .menu-item{
   display:flex;align-items:center;gap:14px;width:100%;padding:12px 14px;border:0;border-radius:var(--r-sm);
   background:transparent;color:var(--text);font-size:15px;font-weight:700;cursor:pointer;text-align:left;
@@ -160,6 +162,21 @@ html[data-theme="dark"] .icon-btn .ic-moon{display:none}
 .menu-item svg{width:23px;height:23px;fill:currentColor;flex:0 0 auto;color:var(--text-dim)}
 .menu-item.danger{color:var(--danger)}
 .menu-item.danger svg{color:var(--danger)}
+/* 菜单内的开关项：Material You Switch */
+.menu-item.toggle{justify-content:space-between;gap:12px}
+.menu-item .mi-text{display:flex;align-items:center;gap:14px;min-width:0}
+.switch{
+  width:44px;height:26px;flex:0 0 auto;border-radius:999px;position:relative;
+  background:var(--surface-2);border:2px solid var(--line);
+  transition:background .24s var(--ease),border-color .24s var(--ease);
+}
+.switch::after{
+  content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;
+  background:var(--text-dim);
+  transition:left .24s var(--ease),background .24s var(--ease);
+}
+.menu-item[aria-checked="true"] .switch{background:var(--accent);border-color:var(--accent)}
+.menu-item[aria-checked="true"] .switch::after{left:21px;background:var(--on-accent)}
 
 /* ============ 双栏骨架 ============ */
 /* 窄屏：两个分组容器透明化，子元素按 grid-area 排列（保持原堆叠顺序） */
@@ -339,6 +356,20 @@ kbd{
 .rec-sub{font-size:11.5px;font-weight:800;color:var(--text-dim);min-width:52px;text-align:right}
 .rec-row.cur .rec-sub{color:var(--accent-soft-text);opacity:.85}
 
+/* ============ 「立体质感」皮肤：还原改版前的渐变 / 高光 / 彩色投影 ============ */
+html[data-skin="classic"] .logo{
+  background:linear-gradient(150deg,hsl(var(--h) 80% 72%),hsl(var(--h) 62% 45%));
+  color:#fff;
+  box-shadow:0 7px 18px hsl(var(--h) 60% 40% / .30);
+  transition:background .4s var(--ease),box-shadow .4s var(--ease),color .4s var(--ease);
+}
+html[data-skin="classic"] .round-btn.primary{box-shadow:0 8px 20px hsl(var(--h) 55% 35% / .28)}
+html[data-skin="classic"] .ovl-icon{box-shadow:var(--shadow-sm)}
+html[data-skin="classic"] .board-wrap.danger{
+  background:var(--board-bg);
+  box-shadow:0 0 0 2.5px var(--danger),0 10px 26px hsl(var(--h) 60% 30% / .18);
+}
+
 /* ============ 宽视口：两栏 ============ */
 @media (min-width:900px){
   .app{padding:18px 26px 44px}
@@ -484,6 +515,8 @@ kbd{
   <symbol id="i-left" viewBox="0 0 24 24"><path d="M14.7 5.3a1 1 0 0 1 0 1.4L9.4 12l5.3 5.3a1 1 0 1 1-1.4 1.4l-6-6a1 1 0 0 1 0-1.4l6-6a1 1 0 0 1 1.4 0Z"/></symbol>
   <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 17.4 6.3 11.7a1 1 0 0 1 1.4-1.4L11 13.6V4.6a1 1 0 0 1 2 0v9l3.3-3.3a1 1 0 1 1 1.4 1.4L12 17.4Z"/></symbol>
   <symbol id="i-right" viewBox="0 0 24 24"><path d="M9.3 18.7a1 1 0 0 1 0-1.4l5.3-5.3-5.3-5.3a1 1 0 0 1 1.4-1.4l6 6a1 1 0 0 1 0 1.4l-6 6a1 1 0 0 1-1.4 0Z"/></symbol>
+  <!-- 视觉皮肤：带高光条的方块 -->
+  <symbol id="i-skin" viewBox="0 0 24 24"><path fill-rule="evenodd" d="M7.5 3h9A4.5 4.5 0 0 1 21 7.5v9A4.5 4.5 0 0 1 16.5 21h-9A4.5 4.5 0 0 1 3 16.5v-9A4.5 4.5 0 0 1 7.5 3Zm-.1 4.7h9.2a1.35 1.35 0 0 1 0 2.7H7.4a1.35 1.35 0 0 1 0-2.7Z"/></symbol>
   <!-- 勾选 -->
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.6 10 17.6 19.4 7"/></symbol>  <!-- 难度选择 / 配色勾选（原先五份） -->
   <!-- 说明 / 记录 -->
@@ -609,6 +642,13 @@ kbd{
     <svg viewBox="0 0 24 24"><use href="#i-trophy"/></svg>
     最佳成绩
   </button>
+  <button class="menu-item toggle" data-menu="skin" id="skinToggle" role="switch" aria-checked="false">
+    <span class="mi-text">
+      <svg viewBox="0 0 24 24"><use href="#i-skin"/></svg>
+      立体质感
+    </span>
+    <span class="switch" aria-hidden="true"></span>
+  </button>
   <button class="menu-item danger" data-menu="clear">
     <svg viewBox="0 0 24 24"><use href="#i-trash"/></svg>
     清除记录
@@ -713,21 +753,27 @@ const BASE_ACCENT_HUE=275;
 
 const root=document.documentElement;
 let theme='light', accentId='purple', accentH=266, C=null;
+/* 视觉皮肤：'flat' = Material You 实色（默认）；'classic' = 改版前的渐变立体 */
+let skin='flat';
+const isClassic = () => skin==='classic';
 
 function themeColors(){
   const h=accentH;
   /* Material You：方块是「实色色调块」，不做渐变/高光/投影；
      层级完全交给色调（tone）与留白，ghostA 是落点虚影的不透明度。 */
+  const cl=isClassic();
   if(theme==='dark') return {
     boardBg:'hsl('+h+', 14%, 13%)', cellBg:'hsl('+h+', 13%, 18%)',
-    sat:62, lig:68,
+    sat: cl?64:62, lig: cl?67:68,
     ghostA:0.17, ghostLineL:72, ghostLineA:0.62, slot:'hsla('+h+', 35%, 72%, .13)',
+    ghost:'hsla('+h+', 60%, 80%, .12)', ghostLine:'hsla('+h+', 70%, 86%, .34)',
     flash:'rgba(255,255,255,.9)', flashText:'#fff'
   };
   return {
     boardBg:'hsl('+h+', 26%, 90%)', cellBg:'hsl('+h+', 30%, 95%)',
-    sat:58, lig:56,
+    sat: cl?56:58, lig: cl?52:56,
     ghostA:0.20, ghostLineL:52, ghostLineA:0.70, slot:'hsla('+h+', 32%, 48%, .14)',
+    ghost:'hsla('+h+', 50%, 45%, .10)', ghostLine:'hsla('+h+', 55%, 40%, .30)',
     flash:'rgba(255,255,255,.95)', flashText:'#1b1722'
   };
 }
@@ -1049,21 +1095,52 @@ function sizeAll(){
 }
 
 /* ---------- 绘制 ---------- */
-/* 格子几何：统一的内缩与圆角，棋盘底格 / 方块 / 虚影三者共用一套比例 */
-const GAP=0.065, RAD=0.30;
+/* 格子几何：棋盘底格 / 方块 / 虚影 / 消行闪光共用一套比例，随皮肤切换
+   flat    —— 内缩 6.5%，圆角取「格子边长」的 30%
+   classic —— 内缩 5.5%，圆角取「整格尺寸」的 26%（与改版前完全一致） */
+function tileGeom(size){
+  if(isClassic()){
+    const pad=Math.max(1,size*0.055);
+    return {pad:pad, s:size-pad*2, r:size*0.26};
+  }
+  const pad=Math.max(1,size*0.065), s=size-pad*2;
+  return {pad:pad, s:s, r:s*0.30};
+}
 function cellRect(x,y,size){
-  const pad=Math.max(1,size*GAP);
-  return {x:x+pad, y:y+pad, s:size-pad*2, r:(size-pad*2)*RAD};
+  const g=tileGeom(size);
+  return {x:x+g.pad, y:y+g.pad, s:g.s, r:g.r};
 }
 function drawTile(c,x,y,size,hue,alpha){
   const g=cellRect(x,y,size);
   if(g.s<=2) return;
+  if(isClassic()){
+    const gr=c.createLinearGradient(g.x,g.y,g.x,g.y+g.s);
+    gr.addColorStop(0,'hsla('+hue+', '+(C.sat+8)+'%, '+(C.lig+11)+'%, '+alpha+')');
+    gr.addColorStop(1,'hsla('+hue+', '+(C.sat-2)+'%, '+(C.lig-7)+'%, '+alpha+')');
+    c.fillStyle=gr;
+    rr(c,g.x,g.y,g.s,g.s,g.r); c.fill();
+    c.fillStyle='hsla('+hue+', 100%, 97%, '+(0.20*alpha)+')';
+    rr(c,g.x+g.s*0.19,g.y+g.s*0.15,g.s*0.62,g.s*0.15,g.r*0.55); c.fill();
+    return;
+  }
   c.fillStyle='hsla('+hue+', '+C.sat+'%, '+C.lig+'%, '+alpha+')';
   rr(c,g.x,g.y,g.s,g.s,g.r); c.fill();
 }
 function drawGhostTile(c,x,y,size,hue){
   const g=cellRect(x,y,size);
   if(g.s<=2) return;
+  if(isClassic()){
+    /* 改版前：中性低透明填充 + 虚线描边 */
+    c.fillStyle=C.ghost;
+    rr(c,g.x,g.y,g.s,g.s,g.r); c.fill();
+    c.save();
+    c.strokeStyle=C.ghostLine;
+    c.lineWidth=Math.max(1.4,size*0.055);
+    if(c.setLineDash) c.setLineDash([size*0.2,size*0.16]);
+    rr(c,g.x,g.y,g.s,g.s,g.r); c.stroke();
+    c.restore();
+    return;
+  }
   /* 虚影 = 同色相的低色调块 + 实线轮廓（Material You 的 outline 角色），
      取消原先的虚线描边与高光，和实心方块保持同一套纯色面语言 */
   c.fillStyle='hsla('+hue+', '+C.sat+'%, '+C.lig+'%, '+C.ghostA+')';
@@ -1075,8 +1152,22 @@ function drawGhostTile(c,x,y,size,hue){
   rr(c,g.x+lw/2,g.y+lw/2,g.s-lw,g.s-lw,Math.max(1,g.r-lw/2)); c.stroke();
   c.restore();
 }
-function drawSlot(c,x,y,size){
-  const g=cellRect(x,y,size);
+function drawSlot(c,x,y,box){
+  if(box<=2) return;
+  if(isClassic()){
+    /* 改版前：虚线方框占位 */
+    const rad=box*0.24;
+    c.fillStyle=C.ghost;
+    rr(c,x,y,box,box,rad); c.fill();
+    c.save();
+    c.strokeStyle=C.ghostLine;
+    c.lineWidth=Math.max(1.6,box*0.055);
+    if(c.setLineDash) c.setLineDash([box*0.2,box*0.16]);
+    rr(c,x,y,box,box,rad); c.stroke();
+    c.restore();
+    return;
+  }
+  const g=cellRect(x,y,box);
   if(g.s<=2) return;
   c.fillStyle=C.slot;
   rr(c,g.x,g.y,g.s,g.s,g.r); c.fill();
@@ -1111,14 +1202,22 @@ function render(){
         drawGhostTile(c,bx*cell,by*cell,cell,hue);
       }
     }
-    /* 当前方块与已落定方块使用同一套实色块：不加投影，避免拟物质感 */
+    /* flat 皮肤下当前方块与已落定方块共用实色块（无投影）；classic 皮肤恢复彩色投影 */
     const m=SHAPES[G.cur.type][G.cur.rot], hue=pieceHue(G.cur.type);
+    const shade=isClassic();
+    if(shade){
+      c.save();
+      c.shadowColor='hsla('+hue+', 70%, 40%, .35)';
+      c.shadowBlur=cell*0.28;
+      c.shadowOffsetY=cell*0.06;
+    }
     for(let r=0;r<m.length;r++) for(let col=0;col<m[r].length;col++){
       if(!m[r][col]) continue;
       const by=G.cur.y+r, bx=G.cur.x+col;
       if(by<0) continue;
       drawTile(c,bx*cell,by*cell,cell,hue,1);
     }
+    if(shade) c.restore();
   }
   if(G.status==='clearing'&&G.clear){
     const k=clamp(G.clear.t/CLEAR_ANIM,0,1);
@@ -1126,9 +1225,9 @@ function render(){
     c.globalAlpha=0.92*(1-k*0.55);
     for(let i=0;i<G.clear.rows.length;i++){
       const r=G.clear.rows[i];
-      const pad=Math.max(1,cell*GAP), s=cell-pad*2;
+      const g=tileGeom(cell);
       c.fillStyle=C.flash;
-      rr(c,pad,r*cell+pad,w-pad*2,s,s*RAD);
+      rr(c,g.pad,r*cell+g.pad,w-g.pad*2,g.s,g.r);
       c.fill();
     }
     c.restore();
@@ -1170,8 +1269,8 @@ function renderPreviews(){
     if(G.hold){
       drawPieceBox(ch,G.hold,0,0,holdCv._w,holdCv._h,cell);
     }else{
-      /* 空态：实色低调块占位（与棋盘底格同一视觉语言，不用虚线） */
-      const box=Math.max(cell*2.6,Math.min(holdCv._w,holdCv._h)*0.5);
+      /* 空态：flat 用实色低调块，classic 用虚线方框（见 drawSlot） */
+      const box=Math.max(cell*2.6,Math.min(holdCv._w,holdCv._h)*(isClassic()?0.46:0.5));
       drawSlot(ch,(holdCv._w-box)/2,(holdCv._h-box)/2,box);
     }
   }
@@ -1363,6 +1462,18 @@ function setAccent(id,save){
   updateSwatches();
   sizeAll();
 }
+function updateSkinUI(){
+  const el=$('skinToggle');
+  if(el) el.setAttribute('aria-checked', isClassic()?'true':'false');
+}
+function setSkin(v,save){
+  skin=(v==='classic')?'classic':'flat';
+  root.setAttribute('data-skin',skin);
+  if(save!==false) LS.set('yitetris.skin',skin);
+  C=themeColors();            /* sat/lig 随皮肤变，必须重算 */
+  updateSkinUI();
+  render(); renderPreviews(); /* 只重绘，不触碰任何对局状态 */
+}
 function setTheme(t,save){
   theme=(t==='dark')?'dark':'light';
   root.setAttribute('data-theme',theme);
@@ -1525,9 +1636,12 @@ function init(){
   if(savedAccent&&savedAccent.id) accentId=savedAccent.id;
   if(savedAccent&&typeof savedAccent.h==='number') accentH=savedAccent.h;
   root.setAttribute('data-theme',theme);
+  skin=(LS.get('yitetris.skin',null)==='classic')?'classic':'flat';
+  root.setAttribute('data-skin',skin);
 
   buildSwatches();
   updateSwatches();
+  updateSkinUI();
   C=themeColors();
   if(!G.board.length) G.board=newBoard();
 
@@ -1546,6 +1660,7 @@ function init(){
     const b=e.target.closest('.menu-item');
     if(!b) return;
     const k=b.getAttribute('data-menu');
+    if(k==='skin'){ setSkin(isClassic()?'flat':'classic'); return; }  /* 就地切换，浮层保持打开 */
     closePops();
     if(k==='how') howTo();
     else if(k==='best') bestList();
