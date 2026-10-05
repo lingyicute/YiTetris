@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96" role="img" aria-label="YiTetris">
+  <title>YiTetris</title>
+  <rect width="96" height="96" rx="22" fill="#653B9B"/>
+  <g transform="translate(18 18) scale(2.5)">
+    <path fill="#FFFFFF" d="M10.7 4.6H20.7A2.4 2.4 0 0 1 23.1 7V9.6A2.4 2.4 0 0 1 20.7 12H17.7A2 2 0 0 0 15.7 14V17A2.4 2.4 0 0 1 13.3 19.4H3.3A2.4 2.4 0 0 1 .9 17V14.4A2.4 2.4 0 0 1 3.3 12H6.3A2 2 0 0 0 8.3 10V7A2.4 2.4 0 0 1 10.7 4.6Z"/>
+  </g>
+</svg>
