@@ -18,7 +18,9 @@ DEFAULT_HTML = os.path.join(os.path.dirname(HERE), "index.html")
 ASCII = {chr(c) for c in range(32, 127)}
 PUNCT = set("：，。！？；‘’“”（）【】—…·《》×＝÷＋－、")
 
-FONT_FACE_RE = re.compile(r'@font-face\s*\{[^}]*\}', re.S)
+# 连同上一次生成的注释头一起匹配，避免重复运行时注释不断堆叠
+_GEN_COMMENT = r'/\*\s*=====\s*Nebulove[^*]*(?:\*(?!/)[^*]*)*\*/'
+FONT_FACE_RE = re.compile(r'(?:' + _GEN_COMMENT + r'\s*)*@font-face\s*\{[^}]*\}')
 
 
 def strip_non_render_text(html):
