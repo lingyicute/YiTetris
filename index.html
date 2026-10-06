@@ -851,7 +851,10 @@ function touchLock(){
 function rotate(dir){
   if(!G.cur||G.status!=='playing') return false;
   const from=G.cur.rot, to=(from+(dir>0?1:3))%4;
-  if(G.cur.type==='O'){ return true; }
+  /* O 型旋转不改变形状，但按 SRS 仍算一次「成功旋转」：
+     要重置锁定延迟并消耗额度，否则 O 贴地时按旋转不会延长锁定时间，
+     与其它 6 种方块不一致。 */
+  if(G.cur.type==='O'){ touchLock(); return true; }
   const table=(G.cur.type==='I')?KICKS_I:KICKS_JLSTZ;
   const kicks=table[from+'>'+to]||[[0,0]];
   for(let i=0;i<kicks.length;i++){
@@ -1371,14 +1374,16 @@ function openModal(opt){
   if(!card) return;
   card.innerHTML=
     '<div class="modal-icon">'+(ICONS[opt.icon]||ICONS.info)+'</div>'+
-    '<h3 class="modal-title">'+opt.title+'</h3>'+
+    '<h3 class="modal-title" id="modalTitle">'+opt.title+'</h3>'+
     '<div class="modal-body">'+opt.body+'</div>'+
     '<div class="modal-foot">'+
       (opt.cancel?'<button class="btn-ghost" data-close>'+opt.cancel+'</button>':'')+
       '<button class="btn-fill" data-ok>'+(opt.ok||'知道了')+'</button>'+
     '</div>';
   modalOk=opt.onOk||null;
-  card.setAttribute('aria-label',opt.title||'');
+  /* 用 aria-labelledby 指向可见标题，而不是 aria-label 复制一份文案：
+     aria-label="" 会把弹窗的可访问名直接抹掉，且与 <h3> 内容脱钩。 */
+  card.setAttribute('aria-labelledby','modalTitle');
   /* 焦点管理：打开时把焦点移进对话框（容器而非确认按钮，
      避免空格/回车误触发确认），关闭时还给打开前的元素。 */
   modalPrevFocus=(document.activeElement&&document.activeElement!==document.body)?document.activeElement:null;
@@ -1388,10 +1393,34 @@ function openModal(opt){
 function isFocusable(el){
   return !!(el&&el.isConnected&&el.getClientRects&&el.getClientRects().length&&typeof el.focus==='function');
 }
+/* 弹窗已声明 role="dialog" aria-modal="true"，Tab 就必须在弹窗内循环，
+   否则焦点会跑到背景按钮上（实测连按 3 次 Tab 就出去了），
+   对键盘/读屏用户等于声明了一个不存在的模态。 */
+function trapModalTab(e){
+  if(!modal) return;
+  const card=modal.querySelector('.modal-card');
+  /* 注意用 a[href] 而不是 [href]：SVG 的 <use href="#i-xxx"> 也会被 [href] 选中，
+     但它们不可聚焦，会让 first 变成一个 <use>、focus() 静默失败、焦点卡死在最后一个按钮上。
+     再按 tabIndex>=0 与可见性过滤一道，双重保险。 */
+  const all=modal.querySelectorAll('button:not([disabled]),a[href],[tabindex]:not([tabindex="-1"])');
+  const f=[];
+  for(let i=0;i<all.length;i++){
+    const el=all[i];
+    if(el.tabIndex>=0&&el.getClientRects&&el.getClientRects().length) f.push(el);
+  }
+  if(!f.length) return;
+  const first=f[0], last=f[f.length-1];
+  const a=document.activeElement;
+  if(a&&!modal.contains(a)){ e.preventDefault(); first.focus(); }            /* 焦点在背景：拉回来 */
+  else if(e.shiftKey&&(a===first||a===card)){ e.preventDefault(); last.focus(); }
+  else if(!e.shiftKey&&a===last){ e.preventDefault(); first.focus(); }
+}
 function closeModal(){
   if(modal){ modal.hidden=true; modalOk=null; }
   let back=modalPrevFocus; modalPrevFocus=null;
-  /* 打开弹窗时菜单已收起，原焦点元素不可见了 —— 退回顶栏菜单按钮，键盘用户不会掉进 <body> */
+  /* 打开弹窗时菜单已收起，原焦点元素不可见了 —— 退回顶栏菜单按钮，键盘用户不会掉进 <body>。
+     注：当前 openModal 只有菜单这一个入口，所以这条回退几乎总会命中；
+     modalPrevFocus 的「还原到原元素」分支是为将来其它入口预留的，不是死代码。 */
   if(!isFocusable(back)) back=isFocusable(menuBtn)?menuBtn:null;
   if(back){ try{ back.focus({preventScroll:true}); }catch(err){} }
 }
@@ -1525,7 +1554,11 @@ function syncThemeColor(){
   const meta=document.querySelector('meta[name="theme-color"]');
   if(!meta||!document.body) return;
   const bg=resolveColor('var(--bg)');
-  if(bg) meta.setAttribute('content',bg);
+  /* 解析失败时（--bg 被改名、主题 CSS 结构调整等）getComputedStyle 返回的是
+     rgba(0, 0, 0, 0) —— 它是 truthy，只写 if(bg) 挡不住，会把 meta 写成全透明，
+     移动端 theme-color 直接失效。失败时保留上一次的正确值，比写成透明好。 */
+  if(!bg||bg==='transparent'||/^rgba\(\s*0,\s*0,\s*0,\s*0\s*\)$/.test(bg)) return;
+  meta.setAttribute('content',bg);
 }
 
 /* ---------- 输入 ---------- */
@@ -1544,11 +1577,16 @@ function setMoveDir(d){
 function bindKeys(){
   document.addEventListener('keydown',function(e){
     if(e.target&&(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')) return;
-    if(modal&&!modal.hidden){ if(e.code==='Escape') closeModal(); return; }
+    if(modal&&!modal.hidden){
+      if(e.code==='Escape'){ closeModal(); return; }
+      if(e.code==='Tab') trapModalTab(e);
+      return;
+    }
     if(openPop){
       closePops();
-      /* 取消空格/回车的默认「点击聚焦按钮」行为，否则刚关掉浮层又被触发按钮弹回来 */
-      if(e.code==='Space'||e.code==='Enter') e.preventDefault();
+      /* 关掉浮层的这一下不要把按键透传出去：空格/回车会再次激活刚点过的按钮，
+         方向键会滚动页面。Tab 要放行，否则抢走键盘导航。 */
+      if(e.code!=='Tab'&&(ACTIONS[e.code]||e.code==='Space'||e.code==='Enter')) e.preventDefault();
       return;
     }
     if(e.code==='Escape'||e.code==='KeyP'){ e.preventDefault(); togglePause(); return; }
@@ -1684,7 +1722,7 @@ function init(){
   root.setAttribute('data-skin',skin);
   /* 与主题/配色/皮肤一致：上次选择的难度也要记住 */
   const savedDiff=LS.get('yitetris.diff',null);
-  if(savedDiff&&DIFFS[savedDiff]) G.diff=savedDiff;
+  G.diff=DIFFS[savedDiff]?savedDiff:'easy';   /* 存了非法值时回退到默认难度 */
 
   buildSwatches();
   updateSwatches();
