@@ -25,7 +25,8 @@ after(async () => {
   if (server) await new Promise(resolve => server.close(resolve));
 });
 beforeEach(async () => {
-  page = await browser.newPage();
+  const context = await browser.newContext();
+  page = await context.newPage();
   errors = [];
   page.on('pageerror', err => errors.push(err.message));
   await page.addInitScript(() => {
@@ -37,7 +38,7 @@ beforeEach(async () => {
   await page.waitForFunction(() => window.__YT?.G.cur);
 });
 afterEach(async () => {
-  await page.close();
+  await page.context().close();
   assert.deepEqual(errors, [], 'no uncaught browser errors');
 });
 async function key(code, type = 'keydown', extra = {}) {
@@ -537,4 +538,112 @@ test('modal Tab handling also includes editable controls', async () => {
   assert.equal(await page.evaluate(() => document.activeElement.hasAttribute('data-ok')), true);
   await page.keyboard.press('Tab');
   assert.equal(await page.evaluate(() => document.activeElement.id), 'modalInput');
+});
+
+// Second review: regressions against 9e43ed8.
+test('a Space activation started before blur cannot resume through a touch button', async () => {
+  await page.locator('[data-act="cw"]').focus();
+  await page.keyboard.down('Space');
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await page.keyboard.up('Space');
+  assert.equal(await page.evaluate(() => __YT.G.status), 'paused');
+  await page.keyboard.press('Space');
+  assert.equal(await page.evaluate(() => __YT.G.status), 'playing', 'a new activation can explicitly resume');
+});
+test('a pause-button pointer activation started before blur cannot undo suspension', async () => {
+  const box = await page.locator('#pauseBtn').boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await page.mouse.up();
+  assert.equal(await page.evaluate(() => __YT.G.status), 'paused');
+  await page.locator('#pauseBtn').click();
+  assert.equal(await page.evaluate(() => __YT.G.status), 'playing');
+});
+test('a restart-button pointer activation started before visibility loss cannot restart', async () => {
+  await page.evaluate(() => { __YT.G.score = 123; });
+  const box = await page.locator('#restartBtn').boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', {configurable: true, value: true});
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await page.mouse.up();
+  assert.deepEqual(await page.evaluate(() => ({status: __YT.G.status, score: __YT.G.score})),
+    {status: 'paused', score: 123});
+});
+test('unchanged active frames do not repaint, but movement and lock still do', async () => {
+  assert.deepEqual(await page.evaluate(() => {
+    window.framesForTest.splice(0).forEach(cb => cb(1000));
+    const c = document.getElementById('board').getContext('2d');
+    let paints = 0; const clear = c.clearRect.bind(c);
+    c.clearRect = (...args) => { paints++; clear(...args); };
+    const frame = ts => window.framesForTest.splice(0).forEach(cb => cb(ts));
+    for (let i = 1; i <= 5; i++) frame(1000 + i * 16);
+    const idle = paints;
+    __YT.tryMove(-1, 0); frame(1100); const moved = paints - idle;
+    __YT.hardDrop(); frame(1120); const locked = paints - idle - moved;
+    return {idle, moved, locked};
+  }), {idle: 0, moved: 1, locked: 1});
+});
+test('clear animation still redraws each frame after unchanged-frame optimization', async () => {
+  assert.equal(await page.evaluate(() => {
+    window.framesForTest.splice(0).forEach(cb => cb(1000));
+    __YT.G.status = 'clearing'; __YT.G.clear = {rows: [13], t: 0}; __YT.G.cur = null;
+    const c = document.getElementById('board').getContext('2d');
+    let paints = 0; const clear = c.clearRect.bind(c);
+    c.clearRect = (...args) => { paints++; clear(...args); };
+    for (let i = 1; i <= 5; i++) window.framesForTest.splice(0).forEach(cb => cb(1000 + i * 16));
+    return paints;
+  }), 5);
+});
+test('record changes in another tab refresh the HUD and cached best score', async () => {
+  const other = await page.context().newPage();
+  try {
+    await other.goto(url);
+    await other.evaluate(() => localStorage.setItem('yitetris.best.easy', '{"score":789,"lines":4}'));
+    await page.waitForFunction(() => document.getElementById('bestVal').textContent === '789', null, {timeout: 2000, polling: 50});
+    await other.evaluate(() => localStorage.clear());
+    await page.waitForFunction(() => document.getElementById('bestVal').textContent === '0', null, {timeout: 2000, polling: 50});
+  } finally { await other.close(); }
+});
+test('difficulty and palette controls expose their selected state', async () => {
+  await page.evaluate(() => { __YT.newGame('hard'); __YT.setAccent('blue'); });
+  assert.deepEqual(await page.evaluate(() => ({
+    difficulty: document.querySelector('#diffRow [aria-pressed="true"]')?.getAttribute('data-diff'),
+    palette: document.querySelector('#swatches [aria-pressed="true"]')?.getAttribute('data-accent'),
+    difficulties: document.querySelectorAll('#diffRow [aria-pressed="false"]').length,
+    palettes: document.querySelectorAll('#swatches [aria-pressed="false"]').length
+  })), {difficulty: 'hard', palette: 'blue', difficulties: 3, palettes: 7});
+});
+test('holding Enter on the pause button does not toggle repeatedly', async () => {
+  await page.locator('#pauseBtn').focus();
+  await page.keyboard.down('Enter');
+  await page.keyboard.down('Enter');
+  await page.keyboard.up('Enter');
+  assert.equal(await page.evaluate(() => __YT.G.status), 'paused');
+});
+test('assistive/programmatic click with no pending activation remains usable', async () => {
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await page.evaluate(() => document.getElementById('pauseBtn').click());
+  assert.equal(await page.evaluate(() => __YT.G.status), 'playing');
+});
+test('explicit render still draws debug board edits and palette changes', async () => {
+  assert.equal(await page.evaluate(() => {
+    const board = document.getElementById('board');
+    const initial = board.toDataURL();
+    __YT.G.board[5][0] = 'J'; __YT.render();
+    const edited = board.toDataURL();
+    __YT.setAccent('red'); const accented = board.toDataURL();
+    return initial !== edited && edited !== accented;
+  }), true);
+});
+test('sessionStorage events do not replace the persisted score cache', async () => {
+  assert.equal(await page.evaluate(() => {
+    __YT.saveBest('easy', 123, 0); __YT.updateHud();
+    localStorage.setItem('yitetris.best.easy', '{"score":999,"lines":0}');
+    window.dispatchEvent(new StorageEvent('storage', {storageArea: sessionStorage, key: 'yitetris.best.easy'}));
+    return document.getElementById('bestVal').textContent;
+  }), '123');
 });
