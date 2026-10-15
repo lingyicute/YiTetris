@@ -161,7 +161,9 @@ YT_BROWSER=webkit npm test
 - Opening menus/dialogs, losing window focus or hiding the page pauses the game. A pending clear freezes immediately and resumes from the same progress. Closing a menu/dialog does **not** automatically resume play; use `P` or the resume button.
 - Held controls are cleared on pause/restart/game over. Opposite directions and keyboard aliases are tracked separately, and pointer cancellation/capture loss releases touch controls. A board gesture belongs to one pointer and one active piece.
 - `Space` on a focused button activates that button; when focus is not on a button, it remains hard drop. Browser shortcuts such as `Ctrl+P` are left alone.
-- Menu/palette focus stays inside the open popover; `Escape` returns focus to its opener. A board click that finishes after focus loss cannot resume a paused game.
+- Menu/palette focus stays inside the open popover; `Escape` returns focus to its opener. A board click that finishes after focus loss cannot resume a paused game. Button activations started before focus/visibility loss are also discarded when their delayed click arrives. A fresh activation still works, while holding Enter on a button does not repeatedly activate it.
+- Best-score caches and the HUD refresh when another same-origin tab changes or clears records; session storage and unrelated preference changes are ignored. Difficulty and palette buttons expose selection with `aria-pressed`.
+- Unchanged active frames skip canvas repainting. Movement, rotation, locking and clearing still update the board, and explicit `render()` calls (including theme/resize updates and direct debug board edits) always repaint.
 - DAS, soft drop, gravity, lock delay and clearing advance on one event timeline. Landing starts its lock timer at the landing event, blocked repeats consume their interval, and remaining frame time carries across locking/clearing. The existing 64 ms per-RAF catch-up cap is retained.
 
 ### Font maintenance

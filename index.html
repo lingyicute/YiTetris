@@ -1219,6 +1219,14 @@ function drawSlot(c,x,y,box){
   c.fillStyle=C.slot;
   rr(c,g.x,g.y,g.s,g.s,g.r); c.fill();
 }
+/* 仅在可见棋盘状态改变时重绘；显式 render()（主题/尺寸/调试）仍强制刷新。
+   消行动画每帧变化，不缓存；锁定/暂存会更换 cur，消行会更换 board。 */
+let drawnBoard=null;
+function boardChanged(){
+  const p=G.cur, d=drawnBoard;
+  return !!G.clear||!d||d.board!==G.board||d.cur!==p||d.status!==G.status||
+    (p&&(d.x!==p.x||d.y!==p.y||d.rot!==p.rot||d.type!==p.type));
+}
 function render(){
   const c=boardCv&&boardCv._ctx;
   if(!c||!C) return;
@@ -1279,6 +1287,9 @@ function render(){
     }
     c.restore();
   }
+  const p=G.cur;
+  drawnBoard={board:G.board,cur:p,status:G.status,x:p&&p.x,y:p&&p.y,
+    rot:p&&p.rot,type:p&&p.type};
 }
 function bounds(m){
   let minR=99,maxR=-1,minC=99,maxC=-1;
@@ -1357,7 +1368,9 @@ function updateDiffChips(){
   const row=$('diffRow'); if(!row) return;
   const chips=row.querySelectorAll('.chip');
   for(let i=0;i<chips.length;i++){
-    chips[i].classList.toggle('on',chips[i].getAttribute('data-diff')===G.diff);
+    const selected=chips[i].getAttribute('data-diff')===G.diff;
+    chips[i].classList.toggle('on',selected);
+    chips[i].setAttribute('aria-pressed',String(selected));
   }
 }
 let toastTimer=0;
@@ -1540,7 +1553,9 @@ function updateSwatches(){
   if(!swatches) return;
   const list=swatches.querySelectorAll('.sw');
   for(let i=0;i<list.length;i++){
-    list[i].classList.toggle('on',list[i].getAttribute('data-accent')===accentId);
+    const selected=list[i].getAttribute('data-accent')===accentId;
+    list[i].classList.toggle('on',selected);
+    list[i].setAttribute('aria-pressed',String(selected));
   }
 }
 function setAccent(id,save){
@@ -1651,6 +1666,51 @@ function releaseInput(id){
   }
   syncInput();
 }
+let activationEpoch=0;
+function suspendGame(){ activationEpoch++; pauseGame(); }
+/* 原生按钮的 click 可能晚于 blur/visibilitychange：只取消跨越失焦的旧操作，
+   不阻止新的显式继续；结合操作来源记录，而非只凭 click.detail 接受事件。 */
+function bindActivationGuard(){
+  const pointers=new Map();
+  let keyboard=null, released=null;
+  const buttonFor=e=>e.target&&e.target.closest?e.target.closest('button'):null;
+  document.addEventListener('pointerdown',function(e){
+    const button=buttonFor(e);
+    if(e.button===0&&button) pointers.set(e.pointerId,{button:button,epoch:activationEpoch});
+  },true);
+  document.addEventListener('pointerup',function(e){
+    const activation=pointers.get(e.pointerId);
+    if(!activation) return;
+    released=activation;
+    // 默认 click 在 pointerup/keyup 后触发，下一任务再清理未产生 click 的操作。
+    setTimeout(function(){
+      if(pointers.get(e.pointerId)===activation) pointers.delete(e.pointerId);
+      if(released===activation) released=null;
+    },0);
+  },true);
+  document.addEventListener('pointercancel',function(e){ pointers.delete(e.pointerId); },true);
+  document.addEventListener('keydown',function(e){
+    if(e.isComposing||e.ctrlKey||e.metaKey||e.altKey) return;
+    if(e.code!=='Space'&&e.code!=='Enter') return;
+    const button=buttonFor(e);
+    if(!button) return;
+    if(e.repeat){ e.preventDefault(); return; }
+    keyboard={button:button,epoch:activationEpoch,code:e.code};
+  },true);
+  document.addEventListener('keyup',function(e){
+    const activation=keyboard;
+    if(!activation||activation.code!==e.code) return;
+    setTimeout(function(){ if(keyboard===activation) keyboard=null; },0);
+  },true);
+  document.addEventListener('click',function(e){
+    const button=buttonFor(e);
+    const activation=e.detail===0?keyboard:(pointers.get(e.pointerId)||released);
+    if(e.detail===0) keyboard=null;
+    if(activation&&activation.button===button&&activation.epoch!==activationEpoch){
+      e.preventDefault(); e.stopImmediatePropagation();
+    }
+  },true);
+}
 function bindKeys(){
   document.addEventListener('keydown',function(e){
     if(e.isComposing||e.ctrlKey||e.metaKey||e.altKey) return;
@@ -1678,7 +1738,7 @@ function bindKeys(){
     if(!e.repeat) pressInput('key:'+e.code,a);
   });
   document.addEventListener('keyup',function(e){ releaseInput('key:'+e.code); });
-  window.addEventListener('blur',pauseGame);
+  window.addEventListener('blur',suspendGame);
 }
 function bindTouchPad(){
   const pad=$('touchPad'); if(!pad) return;
@@ -1763,7 +1823,7 @@ function loop(ts){
   if(dt<0) dt=0;
   if(dt>64) dt=64;
   step(dt);
-  if(G.status==='playing'||G.status==='clearing') render();
+  if((G.status==='playing'||G.status==='clearing')&&boardChanged()) render();
 }
 
 /* ---------- 初始化 ---------- */
@@ -1826,6 +1886,16 @@ function init(){
   if(pauseBtn) pauseBtn.addEventListener('click',togglePause);
   if(restartBtn) restartBtn.addEventListener('click',function(){ newGame(); });
 
+  window.addEventListener('storage',function(e){
+    try{ if(e.storageArea!==localStorage) return; }catch(err){ return; }
+    if(e.key!==null&&!DIFF_KEYS.some(d=>e.key===bestKey(d))) return;
+    for(const d of DIFF_KEYS){
+      if(e.key===null||e.key===bestKey(d)) refreshBest(d);
+    }
+    updateHud();
+  });
+
+  bindActivationGuard();
   bindKeys();
   bindTouchPad();
   bindGestures();
@@ -1854,7 +1924,7 @@ function init(){
     setTimeout(sizeAll,120); setTimeout(sizeAll,420);
   });
   document.addEventListener('visibilitychange',function(){
-    if(document.hidden) pauseGame();
+    if(document.hidden) suspendGame();
   });
 
   newGame(G.diff);
