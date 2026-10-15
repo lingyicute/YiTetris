@@ -14,7 +14,8 @@
   if(t!=='dark'&&t!=='light'){ t = (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark':'light'; }
   document.documentElement.setAttribute('data-theme', t);
   var a=null; try{a=JSON.parse(localStorage.getItem('yitetris.accent'));}catch(e){}
-  if(a && typeof a.h==='number'){ document.documentElement.style.setProperty('--h', a.h); }
+  var hues={purple:266,blue:214,cyan:188,green:146,yellow:46,orange:26,pink:334,red:5};
+  if(a && Object.prototype.hasOwnProperty.call(hues,a.id)){ document.documentElement.style.setProperty('--h', hues[a.id]); }
   var sk=null; try{sk=JSON.parse(localStorage.getItem('yitetris.skin'));}catch(e){}
   document.documentElement.setAttribute('data-skin', sk==='classic' ? 'classic' : 'flat');
 }catch(e){}})();
@@ -784,13 +785,18 @@ const G={
   clear:null
 };
 let moveDir=0, dasAcc=0, dasCharged=false, softHeld=false, softAcc=0;
-let pauseAfterClear=false;   /* 消行动画只有 170ms，期间的暂停请求延后到动画结束生效 */
+const heldInputs=new Map();   /* 按来源记录，避免别名键/多指互相释放 */
 
 const bestKey = d => 'yitetris.best.'+d;
-function loadBest(d){ const b=LS.get(bestKey(d),null); return (b&&typeof b==='object')?{score:b.score||0,lines:b.lines||0}:{score:0,lines:0}; }
+function recordNumber(v){ return Number.isSafeInteger(v)&&v>=0?v:0; }
+function loadBest(d){
+  const b=LS.get(bestKey(d),null);
+  if(!b||typeof b!=='object'||Array.isArray(b)) return {score:0,lines:0};
+  return {score:recordNumber(b.score),lines:recordNumber(b.lines)};
+}
 function saveBest(d,score,lines){
   const b=loadBest(d);
-  const nb={score:Math.max(b.score,score||0),lines:Math.max(b.lines,lines||0)};
+  const nb={score:Math.max(b.score,recordNumber(score)),lines:Math.max(b.lines,recordNumber(lines))};
   LS.set(bestKey(d),nb); bestCache[d]=nb.score; return nb;
 }
 const bestCache={};
@@ -835,32 +841,32 @@ function tryMove(dx,dy){
   if(!G.cur||G.status!=='playing') return false;
   const nx=G.cur.x+dx, ny=G.cur.y+dy;
   if(collide(G.cur.type,G.cur.rot,nx,ny)) return false;
+  const grounded=collide(G.cur.type,G.cur.rot,G.cur.x,G.cur.y+1);
   G.cur.x=nx; G.cur.y=ny;
-  touchLock();
+  if(dx!==0) touchLock(grounded);
   return true;
 }
-/* 落地（锁定计时已启动）后的每次成功移动/旋转都会重置计时并消耗一次额度，
-   即「移动重置」锁定延迟；悬空时由 step() 免费归零，不消耗额度。
-   旧写法把条件写成「悬空才重置」，导致贴地滑动/旋转永远不延长锁定时间、
-   MAX_LOCK_RESETS 也永远用不上。 */
-function touchLock(){
-  if(G.cur&&G.status==='playing'&&G.lockAcc>0&&G.lockResets<MAX_LOCK_RESETS){
+/* 按移动前是否着地计数：同一帧内的操作也必须消耗额度。
+   额度用尽后，离开台阶不再免费清空累计锁定时间。 */
+function touchLock(grounded){
+  if(grounded&&G.lockResets<MAX_LOCK_RESETS){
     G.lockAcc=0; G.lockResets++;
   }
 }
 function rotate(dir){
   if(!G.cur||G.status!=='playing') return false;
   const from=G.cur.rot, to=(from+(dir>0?1:3))%4;
+  const grounded=collide(G.cur.type,from,G.cur.x,G.cur.y+1);
   /* O 型旋转不改变形状，但按 SRS 仍算一次「成功旋转」：
      要重置锁定延迟并消耗额度，否则 O 贴地时按旋转不会延长锁定时间，
      与其它 6 种方块不一致。 */
-  if(G.cur.type==='O'){ touchLock(); return true; }
+  if(G.cur.type==='O'){ touchLock(grounded); return true; }
   const table=(G.cur.type==='I')?KICKS_I:KICKS_JLSTZ;
   const kicks=table[from+'>'+to]||[[0,0]];
   for(let i=0;i<kicks.length;i++){
     const nx=G.cur.x+kicks[i][0], ny=G.cur.y-kicks[i][1];
     if(!collide(G.cur.type,to,nx,ny)){
-      G.cur.rot=to; G.cur.x=nx; G.cur.y=ny; touchLock(); return true;
+      G.cur.rot=to; G.cur.x=nx; G.cur.y=ny; touchLock(grounded); return true;
     }
   }
   return false;
@@ -893,8 +899,15 @@ function doHold(){
   updateHud();
 }
 function lockPiece(){
-  const cur=G.cur; if(!cur) return;
+  const cur=G.cur; if(!cur||G.status!=='playing') return;
   const m=SHAPES[cur.type][cur.rot];
+  /* 本游戏没有隐藏行：任何占用格锁在顶界外都结束，不能悄悄丢弃半个方块。
+     先检查整块，再写棋盘，避免终局时只写入一部分。 */
+  for(let r=0;r<m.length;r++){
+    for(let c=0;c<m[r].length;c++){
+      if(m[r][c]&&cur.y+r<0){ gameOver(); return; }
+    }
+  }
   for(let r=0;r<m.length;r++){
     for(let c=0;c<m[r].length;c++){
       if(!m[r][c]) continue;
@@ -920,7 +933,7 @@ function lockPiece(){
   updateHud(); updateDanger();
 }
 function finishClear(){
-  if(!G.clear) return;
+  if(!G.clear||G.status!=='clearing') return;
   const rows=G.clear.rows, n=rows.length;
   const table=[0,100,300,500,800];
   let pts=(table[n]||800)*G.level;
@@ -940,12 +953,12 @@ function finishClear(){
   G.clear=null;
   G.status='playing';
   spawn();
-  if(pauseAfterClear){ pauseAfterClear=false; if(G.status==='playing') togglePause(); }
   updateHud();
   updateDanger();
 }
 function gameOver(){
   G.status='over';
+  resetInput();
   G.cur=null;
   const b=loadBest(G.diff);
   /* 最高分与最佳消行是两条独立记录：任意一项刷新都算新纪录并落盘 */
@@ -958,12 +971,13 @@ function gameOver(){
   render();
 }
 function newGame(diff){
-  if(diff&&DIFFS[diff]){ G.diff=diff; LS.set('yitetris.diff',diff); }   /* 与主题/配色/皮肤一致，难度也记住 */
+  if(DIFF_KEYS.includes(diff)){ G.diff=diff; LS.set('yitetris.diff',diff); }   /* 与主题/配色/皮肤一致，难度也记住 */
   G.board=newBoard(); G.bag=[]; G.next=[]; G.hold=null; G.canHold=true;
   G.score=0; G.lines=0; G.combo=-1; G.lastBig=false; G.clear=null;
   G.level=DIFFS[G.diff].start;
   G.dropAcc=0; G.lockAcc=0; G.lockResets=0;
-  moveDir=0; dasAcc=0; dasCharged=false; softHeld=false; softAcc=0; pauseAfterClear=false;
+  resetInput();
+  lastTs=0;
   G.status='playing';
   hideOverlay();
   refreshBest(G.diff);
@@ -972,17 +986,27 @@ function newGame(diff){
   updatePauseBtn();
   updateHud(); updateDiffChips(); renderPreviews(); updateDanger(); render();
 }
+function pauseGame(){
+  resetInput();
+  if(G.status!=='playing'&&G.status!=='clearing') return;
+  G.status='paused';
+  showOverlay('paused');
+  updatePauseBtn(); updateDanger(); render();
+}
 function togglePause(){
-  if(G.status==='playing'){ G.status='paused'; showOverlay('paused'); }
-  else if(G.status==='paused'){ G.status='playing'; hideOverlay(); }
-  else if(G.status==='clearing'){ pauseAfterClear=!pauseAfterClear; }  /* 消行中：记下请求，动画结束后生效 */
-  updatePauseBtn();
+  if(G.status==='paused'){
+    resetInput();
+    G.status=G.clear?'clearing':'playing';
+    lastTs=0;
+    hideOverlay();
+    updatePauseBtn(); updateDanger(); render();
+  }else pauseGame();
 }
 /* 暂停按钮的图标与读屏标签要跟随状态：暂停中显示「播放」 */
 function updatePauseBtn(){
   const b=$('pauseBtn'); if(!b) return;
   const u=b.querySelector('use');
-  const paused=(G.status==='paused')||(G.status==='clearing'&&pauseAfterClear);
+  const paused=G.status==='paused';
   if(u) u.setAttribute('href',paused?'#i-play':'#i-pause');
   b.setAttribute('aria-label',paused?'继续游戏':'暂停');
 }
@@ -1019,7 +1043,7 @@ function step(dt){
   if(G.cur&&collide(G.cur.type,G.cur.rot,G.cur.x,G.cur.y+1)){
     G.lockAcc+=dt;
     if(G.lockAcc>=LOCK_DELAY) lockPiece();
-  }else{
+  }else if(G.lockResets<MAX_LOCK_RESETS){
     G.lockAcc=0;
   }
 }
@@ -1232,7 +1256,7 @@ function render(){
     }
     if(shade) c.restore();
   }
-  if(G.status==='clearing'&&G.clear){
+  if(G.clear){
     const k=clamp(G.clear.t/CLEAR_ANIM,0,1);
     c.save();
     c.globalAlpha=0.92*(1-k*0.55);
@@ -1372,6 +1396,7 @@ function openModal(opt){
   if(!modal) return;
   const card=modal.querySelector('.modal-card');
   if(!card) return;
+  pauseGame();
   card.innerHTML=
     '<div class="modal-icon">'+(ICONS[opt.icon]||ICONS.info)+'</div>'+
     '<h3 class="modal-title" id="modalTitle">'+opt.title+'</h3>'+
@@ -1481,6 +1506,7 @@ function togglePop(which){
   const btn=(which==='palette')?paletteBtn:menuBtn;
   if(openPop===which&&target&&!target.hidden){ closePops(); return; }
   closePops();
+  pauseGame();
   if(target) target.hidden=false;
   if(scrim) scrim.hidden=false;
   if(btn){ btn.classList.add('on'); btn.setAttribute('aria-expanded','true'); }
@@ -1570,123 +1596,147 @@ const ACTIONS={
   KeyZ:'ccw',
   Space:'hard',KeyC:'hold',ShiftLeft:'hold',ShiftRight:'hold'
 };
-function setMoveDir(d){
-  moveDir=d; dasAcc=0; dasCharged=false;
-  doMove(d);
+function resetInput(){
+  heldInputs.forEach(input=>{ if(input.button) input.button.classList.remove('active'); });
+  heldInputs.clear();
+  moveDir=0; dasAcc=0; dasCharged=false; softHeld=false; softAcc=0;
+  T=null;
+}
+function syncInput(){
+  let dir=0, soft=false;
+  heldInputs.forEach(input=>{
+    if(input.act==='left') dir=-1;
+    if(input.act==='right') dir=1;
+    if(input.act==='soft') soft=true;
+  });
+  if(dir!==moveDir){
+    moveDir=dir; dasAcc=0; dasCharged=false;
+    if(dir) doMove(dir);
+  }
+  if(soft!==softHeld) softAcc=0;
+  softHeld=soft;
+}
+function performAction(act){
+  if(act==='cw') rotate(1);
+  else if(act==='ccw') rotate(-1);
+  else if(act==='hard') hardDrop();
+  else if(act==='hold') doHold();
+}
+function pressInput(id,act,button){
+  if(heldInputs.has(id)||G.status!=='playing') return;
+  heldInputs.set(id,{act:act,button:button});
+  if(button) button.classList.add('active');
+  syncInput();
+  performAction(act);
+}
+function releaseInput(id){
+  const input=heldInputs.get(id);
+  if(!input) return;
+  heldInputs.delete(id);
+  if(input.button&&!Array.from(heldInputs.values()).some(v=>v.button===input.button)){
+    input.button.classList.remove('active');
+  }
+  syncInput();
 }
 function bindKeys(){
   document.addEventListener('keydown',function(e){
-    if(e.target&&(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA')) return;
+    if(e.isComposing||e.ctrlKey||e.metaKey||e.altKey) return;
+    if(e.target&&(e.target.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName))) return;
     if(modal&&!modal.hidden){
-      if(e.code==='Escape'){ closeModal(); return; }
+      if(e.code==='Escape'){ e.preventDefault(); closeModal(); return; }
       if(e.code==='Tab') trapModalTab(e);
       return;
     }
     if(openPop){
-      closePops();
-      /* 关掉浮层的这一下不要把按键透传出去：空格/回车会再次激活刚点过的按钮，
-         方向键会滚动页面。Tab 要放行，否则抢走键盘导航。 */
-      if(e.code!=='Tab'&&(ACTIONS[e.code]||e.code==='Space'||e.code==='Enter')) e.preventDefault();
+      /* 菜单按钮的 Enter/Space 保留原生激活行为，Escape 才关闭浮层。 */
+      if(e.code==='Escape'){ e.preventDefault(); closePops(); }
       return;
     }
-    if(e.code==='Escape'||e.code==='KeyP'){ e.preventDefault(); togglePause(); return; }
-    if(e.ctrlKey||e.metaKey||e.altKey) return;
-    if(e.code==='KeyR'){ newGame(); return; }
+    if(e.code==='Escape'||e.code==='KeyP'){
+      e.preventDefault(); if(!e.repeat) togglePause(); return;
+    }
+    if(e.code==='KeyR'){ e.preventDefault(); if(!e.repeat) newGame(); return; }
     const a=ACTIONS[e.code];
     if(!a) return;
-    /* 注意：这里不能无条件 blur() 聚焦中的按钮 —— 那会吞掉键盘用户
-       用 Enter 激活按钮的默认行为（已在真实浏览器验证）。
-       空格/方向键等已 preventDefault，不会误触发按钮点击。 */
+    /* 聚焦按钮时 Space 应激活按钮，而不是触发硬降。 */
+    if(e.code==='Space'&&e.target&&e.target.closest&&e.target.closest('button')) return;
     e.preventDefault();
-    if(a==='left'||a==='right'){ if(!e.repeat) setMoveDir(a==='left'?-1:1); return; }
-    if(a==='soft'){ if(!e.repeat) softHeld=true; return; }
-    if(e.repeat) return;
-    if(a==='cw') rotate(1);
-    else if(a==='ccw') rotate(-1);
-    else if(a==='hard') hardDrop();
-    else if(a==='hold') doHold();
+    if(!e.repeat) pressInput('key:'+e.code,a);
   });
-  document.addEventListener('keyup',function(e){
-    const a=ACTIONS[e.code];
-    if(!a) return;
-    if(a==='left'&&moveDir===-1){ moveDir=0; dasCharged=false; dasAcc=0; }
-    if(a==='right'&&moveDir===1){ moveDir=0; dasCharged=false; dasAcc=0; }
-    if(a==='soft') softHeld=false;
-  });
-  window.addEventListener('blur',function(){ moveDir=0; softHeld=false; dasCharged=false; });
+  document.addEventListener('keyup',function(e){ releaseInput('key:'+e.code); });
+  window.addEventListener('blur',pauseGame);
 }
 function bindTouchPad(){
   const pad=$('touchPad'); if(!pad) return;
   const btns=pad.querySelectorAll('.pad-btn');
   for(let i=0;i<btns.length;i++){
-    (function(btn){
-      const act=btn.getAttribute('data-act');
-      const down=function(e){
-        e.preventDefault();
-        if(e.pointerId!=null&&btn.setPointerCapture){ try{ btn.setPointerCapture(e.pointerId); }catch(err){} }
-        btn.classList.add('active');
-        if(G.status==='paused'){ togglePause(); return; }
-        if(act==='left') setMoveDir(-1);
-        else if(act==='right') setMoveDir(1);
-        else if(act==='soft') softHeld=true;
-        else if(act==='cw') rotate(1);
-        else if(act==='hard') hardDrop();
-        else if(act==='hold') doHold();
-      };
-      const up=function(){
-        btn.classList.remove('active');
-        if(act==='left'&&moveDir===-1){ moveDir=0; dasCharged=false; dasAcc=0; }
-        if(act==='right'&&moveDir===1){ moveDir=0; dasCharged=false; dasAcc=0; }
-        if(act==='soft') softHeld=false;
-      };
-      btn.addEventListener('pointerdown',down);
-      btn.addEventListener('pointerup',up);
-      btn.addEventListener('pointercancel',up);
-      btn.addEventListener('pointerleave',up);
-    })(btns[i]);
+    const btn=btns[i], act=btn.getAttribute('data-act');
+    btn.addEventListener('pointerdown',function(e){
+      if(e.button!==0) return;
+      e.preventDefault();
+      if(G.status==='paused'){ togglePause(); return; }
+      if(G.status!=='playing') return;
+      if(btn.setPointerCapture){ try{ btn.setPointerCapture(e.pointerId); }catch(err){} }
+      pressInput('pointer:'+e.pointerId,act,btn);
+    });
+    const up=function(e){ releaseInput('pointer:'+e.pointerId); };
+    btn.addEventListener('pointerup',up);
+    btn.addEventListener('pointercancel',up);
+    btn.addEventListener('lostpointercapture',up);
+    /* detail=0 是键盘/辅助技术激活；真实指针已在 pointerdown 处理。 */
+    btn.addEventListener('click',function(e){
+      if(e.detail!==0) return;
+      if(G.status==='paused'){ togglePause(); return; }
+      if(act==='left') doMove(-1);
+      else if(act==='right') doMove(1);
+      else if(act==='soft') softStep();
+      else performAction(act);
+    });
   }
 }
 /* 触屏手势：拖动左右移动 / 下滑软降 / 轻点旋转 / 快速下滑落底 / 上滑暂存 */
 let T=null;
 function bindGestures(){
   if(!boardCv||!boardCv.addEventListener) return;
-  boardCv.addEventListener('touchstart',function(e){
-    if(G.status==='paused'){ return; }
-    if(!G.cur||G.status!=='playing'){ return; }
-    const t=e.touches[0];
-    T={x:t.clientX,y:t.clientY,sx:t.clientX,sy:t.clientY,t0:Date.now(),moved:false,axis:0};
-  },{passive:true});
-  boardCv.addEventListener('touchmove',function(e){
-    if(!T) return;
+  boardCv.addEventListener('pointerdown',function(e){
+    if(e.button!==0||T||!G.cur||G.status!=='playing') return;
     e.preventDefault();
-    const t=e.touches[0];
+    T={id:e.pointerId,piece:G.cur,x:e.clientX,y:e.clientY,sx:e.clientX,sy:e.clientY,
+      t0:performance.now(),moved:false,axis:0};
+    if(boardCv.setPointerCapture){ try{ boardCv.setPointerCapture(e.pointerId); }catch(err){} }
+  });
+  boardCv.addEventListener('pointermove',function(e){
+    if(!T||T.id!==e.pointerId) return;
+    if(G.status!=='playing'||G.cur!==T.piece){ T=null; return; }
+    e.preventDefault();
     const cell=Math.max(20,(boardCv._w||300)/COLS*0.92);
-    const dx=t.clientX-T.x, dy=t.clientY-T.y;
-    const adx=Math.abs(t.clientX-T.sx), ady=Math.abs(t.clientY-T.sy);
+    const dx=e.clientX-T.x, dy=e.clientY-T.y;
+    const adx=Math.abs(e.clientX-T.sx), ady=Math.abs(e.clientY-T.sy);
     if(T.axis===0){ if(adx>ady+8) T.axis=1; else if(ady>adx+8) T.axis=2; }
     if(T.axis===1){
-      if(dx>=cell){ T.x+=cell; T.moved=true; doMove(1); }
-      else if(dx<=-cell){ T.x-=cell; T.moved=true; doMove(-1); }
-    }else if(T.axis===2&&dy>0){
-      if(dy>=cell){ T.y+=cell; T.moved=true; softStep(); }
-      else if(dy<-cell){ T.y-=cell; }
+      const steps=Math.min(COLS,Math.floor(Math.abs(dx)/cell)), dir=dx<0?-1:1;
+      for(let i=0;i<steps;i++){ doMove(dir); T.x+=dir*cell; T.moved=true; }
+    }else if(T.axis===2){
+      const steps=Math.min(ROWS,Math.floor(Math.abs(dy)/cell));
+      for(let i=0;i<steps;i++){
+        if(dy>0) softStep();
+        T.y+=(dy>0?1:-1)*cell; T.moved=true;
+      }
     }
-  },{passive:false});
-  const end=function(e){
-    if(!T) return;
-    const t=(e.changedTouches&&e.changedTouches[0])||null;
-    if(t){
-      const dt=Math.max(1,Date.now()-T.t0);
-      const dx=t.clientX-T.sx, dy=t.clientY-T.sy;
-      const vy=dy/dt;
-      if(!T.moved&&Math.abs(dx)<14&&Math.abs(dy)<14&&dt<320){ rotate(1); }
-      else if(dy<-56&&Math.abs(dx)<70&&dt<420){ doHold(); }
-      else if(dy>60&&Math.abs(dx)<70&&(vy>0.85||T.axis===0)){ hardDrop(); }
-    }
-    T=null;
-  };
-  boardCv.addEventListener('touchend',end);
-  boardCv.addEventListener('touchcancel',function(){ T=null; });
+  });
+  boardCv.addEventListener('pointerup',function(e){
+    if(!T||T.id!==e.pointerId) return;
+    const gesture=T; T=null;
+    if(G.status!=='playing'||G.cur!==gesture.piece) return;
+    const dt=Math.max(1,performance.now()-gesture.t0);
+    const dx=e.clientX-gesture.sx, dy=e.clientY-gesture.sy;
+    if(!gesture.moved&&Math.abs(dx)<14&&Math.abs(dy)<14&&dt<320) rotate(1);
+    else if(dy<-56&&Math.abs(dx)<70&&dt<420) doHold();
+    else if(dy>60&&Math.abs(dx)<70&&(dy/dt>0.85||gesture.axis===0)) hardDrop();
+  });
+  const cancel=function(e){ if(T&&T.id===e.pointerId) T=null; };
+  boardCv.addEventListener('pointercancel',cancel);
+  boardCv.addEventListener('lostpointercapture',cancel);
   /* 暂停时点击棋盘继续 */
   boardCv.addEventListener('click',function(){
     if(G.status==='paused') togglePause();
@@ -1707,7 +1757,7 @@ function loop(ts){
   }else{
     step(dt);
   }
-  render();
+  if(G.status==='playing'||G.status==='clearing') render();
 }
 
 /* ---------- 初始化 ---------- */
@@ -1715,14 +1765,15 @@ function init(){
   const savedTheme=LS.get('yitetris.theme',null);
   theme=(savedTheme==='dark')?'dark':(savedTheme==='light'?'light':(root.getAttribute('data-theme')==='dark'?'dark':'light'));
   const savedAccent=LS.get('yitetris.accent',null);
-  if(savedAccent&&savedAccent.id) accentId=savedAccent.id;
-  if(savedAccent&&typeof savedAccent.h==='number') accentH=savedAccent.h;
+  const savedPalette=ACCENTS.find(a=>savedAccent&&a.id===savedAccent.id)||ACCENTS[0];
+  accentId=savedPalette.id; accentH=savedPalette.h;
+  root.style.setProperty('--h',accentH);
   root.setAttribute('data-theme',theme);
   skin=(LS.get('yitetris.skin',null)==='classic')?'classic':'flat';
   root.setAttribute('data-skin',skin);
   /* 与主题/配色/皮肤一致：上次选择的难度也要记住 */
   const savedDiff=LS.get('yitetris.diff',null);
-  G.diff=DIFFS[savedDiff]?savedDiff:'easy';   /* 存了非法值时回退到默认难度 */
+  G.diff=DIFF_KEYS.includes(savedDiff)?savedDiff:'easy';   /* 存了非法值时回退到默认难度 */
 
   buildSwatches();
   updateSwatches();
@@ -1797,7 +1848,7 @@ function init(){
     setTimeout(sizeAll,120); setTimeout(sizeAll,420);
   });
   document.addEventListener('visibilitychange',function(){
-    if(document.hidden&&G.status==='playing') togglePause();
+    if(document.hidden) pauseGame();
   });
 
   newGame(G.diff);
