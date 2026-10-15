@@ -45,7 +45,10 @@ class StyleParser(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         if tag == 'style':
-            attributes = dict(attrs)
+            # HTML keeps the first occurrence of duplicate attributes.
+            attributes = {}
+            for key, value in attrs:
+                attributes.setdefault(key, value)
             self.in_style = (attributes.get('type') or 'text/css').strip().lower() in ('', 'text/css')
 
     def handle_endtag(self, tag):
@@ -106,19 +109,46 @@ def font_face_span(html):
     return matches[0]
 
 
-def strip_non_render_text(html):
-    """Strip HTML comments/style; conservatively retain JavaScript source.
+class TextParser(HTMLParser):
+    """Collect source text conservatively, respecting HTML raw-text contexts."""
+    CDATA_CONTENT_ELEMENTS = StyleParser.CDATA_CONTENT_ELEMENTS
 
-    Regex comment stripping corrupts strings such as "/* 中文 */". Keeping
-    script comments costs a few extra glyphs but cannot remove UI literals.
+    def __init__(self, html):
+        super().__init__(convert_charrefs=False)
+        self.in_style = False
+        self.text = []
+        self.feed(html)
+        self.close()
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'style':
+            self.in_style = True
+        if not self.in_style:
+            # Include labels/tooltips and strings later consumed by JS too.
+            self.text.extend(value for key, value in attrs if value is not None)
+
+    def handle_endtag(self, tag):
+        if tag == 'style':
+            self.in_style = False
+
+    def handle_data(self, data):
+        if not self.in_style:
+            self.text.append(data)
+
+    def handle_entityref(self, name):
+        self.handle_data('&' + name + ';')
+
+    def handle_charref(self, name):
+        self.handle_data('&#' + name + ';')
+
+
+def strip_non_render_text(html):
+    """Omit real comments/styles, not their visible textarea/attribute examples.
+
+    Script source is retained, including comment-like UI strings. This is a
+    conservative collector, not a JavaScript evaluator or CSS content parser.
     """
-    # Protect script bodies before stripping HTML comments (which can occur
-    # inside JS strings too). The page does not render CSS-generated copy.
-    parts = re.split(r'(<script\b[^>]*>.*?</script>)', html, flags=re.S | re.I)
-    for i in range(0, len(parts), 2):
-        parts[i] = re.sub(r'<!--.*?-->', '', parts[i], flags=re.S)
-        parts[i] = re.sub(r'<style\b[^>]*>.*?</style>', '', parts[i], flags=re.S | re.I)
-    return ''.join(parts)
+    return ' '.join(TextParser(html).text)
 
 
 def collect_chars(html, all_text=False, extra=""):
@@ -207,7 +237,7 @@ def main():
 
     if not os.path.exists(args.html):
         sys.exit("找不到页面文件：%s" % args.html)
-    with open(args.html, encoding="utf-8") as f:
+    with open(args.html, encoding="utf-8", newline="") as f:
         html = f.read()
     try:
         face_start, face_end = font_face_span(html)

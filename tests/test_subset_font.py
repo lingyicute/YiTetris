@@ -206,5 +206,36 @@ class FontTests(unittest.TestCase):
         self.assertEqual(html[start:end], FACE)
 
 
+    def test_visible_raw_text_examples_are_not_stripped_as_markup(self):
+        for tag in ('textarea', 'title', 'xmp'):
+            with self.subTest(tag=tag):
+                chars = font.collect_chars('<' + tag + '><!--梨--><style>鱼</style></' + tag + '>')
+                self.assertTrue(set('梨鱼') <= chars)
+
+    def test_css_markup_inside_attribute_values_does_not_remove_visible_copy(self):
+        chars = font.collect_chars('<span title="<style>梨</style>">鱼</span>')
+        self.assertTrue(set('梨鱼') <= chars)
+
+    def test_duplicate_style_type_uses_first_attribute_like_html(self):
+        prefix = '<style type="text/plain" type="text/css">' + FACE + '</style>'
+        html = prefix + '<style>' + FACE + '</style>'
+        start, end = font_span(html)
+        self.assertEqual(html[:start], prefix + '<style>')
+        self.assertEqual(html[start:end], FACE)
+
+    def test_cli_preserves_crlf_outside_replaced_font_face(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path, argv = self.run_cli(tmp)
+            prefix, suffix = '<!doctype html>\r\n<style>', '</style>\r\n<p>梨</p>\r\n'
+            path.write_bytes((prefix + FACE + suffix).encode('utf-8'))
+            with patch('sys.argv', argv), patch.object(font, 'HERE', tmp), \
+                 patch.object(font, 'build_subset', return_value=(b'woff', set())), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                font.main()
+            result = path.read_bytes()
+            self.assertTrue(result.startswith(prefix.encode('utf-8')))
+            self.assertTrue(result.endswith(suffix.encode('utf-8')))
+
+
 if __name__ == '__main__':
     unittest.main()
