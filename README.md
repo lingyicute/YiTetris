@@ -143,7 +143,16 @@ npm test
 python3 -m unittest discover -s tests -p 'test_*.py'
 ```
 
-The browser suite covers game rules, malformed storage, pause/clear transitions, keyboard and pointer input, offline `file://` startup, responsive layouts and seeded action sequences. The Python unit tests use only the standard library. The same commands run in CI.
+The browser suite covers game rules, malformed storage, pause/clear transitions, keyboard and pointer input, offline `file://` startup, responsive layouts and seeded action sequences. It also compares different frame partitions and checks real pointer/click ordering. The Python unit tests use only the standard library.
+
+Chromium is the default. To run the same suite across all three engines (as the CI matrix does):
+
+```bash
+npx playwright install --with-deps chromium firefox webkit
+npm test
+YT_BROWSER=firefox npm test
+YT_BROWSER=webkit npm test
+```
 
 ### Explicit game rules and input behavior
 
@@ -152,10 +161,12 @@ The browser suite covers game rules, malformed storage, pause/clear transitions,
 - Opening menus/dialogs, losing window focus or hiding the page pauses the game. A pending clear freezes immediately and resumes from the same progress. Closing a menu/dialog does **not** automatically resume play; use `P` or the resume button.
 - Held controls are cleared on pause/restart/game over. Opposite directions and keyboard aliases are tracked separately, and pointer cancellation/capture loss releases touch controls. A board gesture belongs to one pointer and one active piece.
 - `Space` on a focused button activates that button; when focus is not on a button, it remains hard drop. Browser shortcuts such as `Ctrl+P` are left alone.
+- Menu/palette focus stays inside the open popover; `Escape` returns focus to its opener. A board click that finishes after focus loss cannot resume a paused game.
+- DAS, soft drop, gravity, lock delay and clearing advance on one event timeline. Landing starts its lock timer at the landing event, blocked repeats consume their interval, and remaining frame time carries across locking/clearing. The existing 64 ms per-RAF catch-up cap is retained.
 
 ### Font maintenance
 
-Use `--ttf /path/to/full-font.woff2` for a local, reproducible font source. `--check` does not modify the HTML or emit a subset artifact; temporary downloads are removed automatically. `--extra-chars glyphs.txt` is available for dynamically generated text or JavaScript Unicode escapes that static collection cannot infer. CSS-generated textual content is not collected. No UI copy changed in the fixes above, so the existing embedded font was deliberately retained.
+Use `--ttf /path/to/full-font.woff2` for a local, reproducible font source. `--check` does not modify the HTML or emit a subset artifact; temporary downloads are removed automatically. `--extra-chars glyphs.txt` is available for dynamically generated text or JavaScript Unicode escapes that static collection cannot infer. CSS-generated textual content is not collected. Font replacement scans real inline CSS rather than text in scripts, comments or text areas, and requires exactly one supported Nebulove face; multiple weight/range variants are rejected before downloading or writing. CSS-escaped family names are not evaluated by this narrow scanner. HTML updates preserve symlink entry points. No UI copy changed in the fixes above, so the existing embedded font was deliberately retained.
 
 <br>
 
