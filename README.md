@@ -43,7 +43,7 @@ Most browser Tetris clones get the pieces right and everything else wrong: rotat
   - **Hold slot** with the standard once-per-piece rule, plus a **ghost piece** marking the landing position.
   - **Lock delay with a reset limit**, so last-moment slides and spins are rewarded but not exploitable.
   - **DAS / auto-shift** with charged repeat, and separate soft-drop handling for precise stacking.
-  - **Danger band** shading near the top of the board, and pause / resume (`P`) without losing state.
+  - **Danger band** shading near the top of the board, and pause / resume (`P`) without losing state, including during line-clear animations.
 
 - **🏆 Scoring You Can Optimise**
   - Singles, doubles, triples and Tetrises pay **100 / 300 / 500 / 800 × level**.
@@ -83,7 +83,7 @@ Rotation uses SRS kick tables rather than a naive "try four offsets" loop, the p
 The board is drawn on a `<canvas>` with rounded-rectangle cells, and every colour — board background, empty cell, ghost outline, danger band — is pulled from the current Material palette. Switching accents rebuilds the piece colours too, so the stack always looks of a piece with the interface around it.
 
 ### 3. Self-Contained, Tool-Assisted Fonts
-The page uses a single inline SVG sprite for every icon and an inline data-URI SVG for the favicon, so there is nothing to request. The "Nebulove" typeface is subset and embedded by `scripts/subset_font.py`, which strips comments and non-rendering text, collects exactly the glyphs the page can display, and writes the base64 WOFF2 back into the HTML:
+The page uses a single inline SVG sprite for every icon and an inline data-URI SVG for the favicon, so there is nothing to request. The "Nebulove" typeface is subset and embedded by `scripts/subset_font.py`. It removes HTML comments and styles, decodes HTML entities, and conservatively retains JavaScript source so comment-like UI strings are not lost. It writes the base64 WOFF2 back into the Nebulove font face using an atomic replacement:
 
 ```bash
 pip install fonttools brotli
@@ -129,6 +129,33 @@ There is no build step: `index.html` is the source *and* the artifact.
    pip install fonttools brotli
    python3 scripts/subset_font.py
    ```
+
+<br>
+
+## 🧪 Regression Tests
+
+The game still has **no runtime dependencies or build step**. Node.js and Playwright are development-only tools for testing real browser input, canvas and DOM behavior:
+
+```bash
+npm ci
+npx playwright install --with-deps chromium
+npm test
+python3 -m unittest discover -s tests -p 'test_*.py'
+```
+
+The browser suite covers game rules, malformed storage, pause/clear transitions, keyboard and pointer input, offline `file://` startup, responsive layouts and seeded action sequences. The Python unit tests use only the standard library. The same commands run in CI.
+
+### Explicit game rules and input behavior
+
+- This is a **14×14 board without hidden rows**, not a complete Tetris Guideline implementation. A blocked spawn ends the game. If any occupied cell is above the board when a piece locks, the game also ends; cells are never silently discarded. Empty padding in a shape does not count.
+- Successful grounded moves/rotations consume the bounded lock-reset budget, including multiple operations in one animation frame. After the budget is exhausted, temporarily leaving a ledge no longer erases elapsed lock time.
+- Opening menus/dialogs, losing window focus or hiding the page pauses the game. A pending clear freezes immediately and resumes from the same progress. Closing a menu/dialog does **not** automatically resume play; use `P` or the resume button.
+- Held controls are cleared on pause/restart/game over. Opposite directions and keyboard aliases are tracked separately, and pointer cancellation/capture loss releases touch controls. A board gesture belongs to one pointer and one active piece.
+- `Space` on a focused button activates that button; when focus is not on a button, it remains hard drop. Browser shortcuts such as `Ctrl+P` are left alone.
+
+### Font maintenance
+
+Use `--ttf /path/to/full-font.woff2` for a local, reproducible font source. `--check` does not modify the HTML or emit a subset artifact; temporary downloads are removed automatically. `--extra-chars glyphs.txt` is available for dynamically generated text or JavaScript Unicode escapes that static collection cannot infer. CSS-generated textual content is not collected. No UI copy changed in the fixes above, so the existing embedded font was deliberately retained.
 
 <br>
 
