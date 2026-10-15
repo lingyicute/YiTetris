@@ -3,7 +3,9 @@ const {test, before, after, beforeEach, afterEach} = require('node:test');
 const assert = require('node:assert/strict');
 const {readFileSync} = require('node:fs');
 const {createServer} = require('node:http');
-const {chromium} = require('playwright');
+const {chromium, firefox, webkit} = require('playwright');
+const browserType = {chromium, firefox, webkit}[process.env.YT_BROWSER || 'chromium'];
+if (!browserType) throw new Error('YT_BROWSER must be chromium, firefox or webkit');
 const {resolve} = require('node:path');
 
 // YT_HTML allows the same regression suite to be run against an older revision.
@@ -16,7 +18,7 @@ before(async () => {
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   url = `http://127.0.0.1:${server.address().port}`;
-  browser = await chromium.launch({headless: true});
+  browser = await browserType.launch({headless: true});
 });
 after(async () => {
   if (browser) await browser.close();
@@ -423,4 +425,116 @@ test('seeded action sequences preserve board, active-piece, queue and score inva
     }
     return true;
   }), true);
+});
+
+// real event ordering and frame partitioning, not just end states.
+test('landing starts lock time at the landing event, not at the start of the frame', async () => {
+  assert.equal(await page.evaluate(() => {
+    const {G, CONST, step} = __YT;
+    G.cur = {type: 'O', rot: 0, x: 5, y: CONST.ROWS - 3};
+    G.dropAcc = 990;
+    step(10);
+    return G.lockAcc;
+  }), 0);
+});
+test('DAS retains time past the initial delay across different frame partitions', async () => {
+  assert.deepEqual(await page.evaluate(() => {
+    const {G, newGame, step} = __YT;
+    function run(frames) {
+      newGame(); G.cur = {type: 'O', rot: 0, x: 10, y: 0};
+      document.dispatchEvent(new KeyboardEvent('keydown', {code: 'ArrowLeft'}));
+      frames.forEach(step);
+      return G.cur.x;
+    }
+    return [run(Array(5).fill(64)), run(Array(20).fill(16)), run([320])];
+  }), [4, 4, 4]);
+});
+test('soft drop and gravity use the same elapsed timeline at the gravity floor', async () => {
+  assert.deepEqual(await page.evaluate(() => {
+    const {G, newGame, step} = __YT;
+    function run(frames) {
+      newGame(); G.level = 100; G.cur = {type: 'O', rot: 0, x: 5, y: 0};
+      document.dispatchEvent(new KeyboardEvent('keydown', {code: 'ArrowDown'}));
+      frames.forEach(step);
+      return {y: G.cur.y, score: G.score, gravity: G.dropAcc};
+    }
+    return [run(Array(4).fill(64)), run(Array(16).fill(16))];
+  }), [{y: 6, score: 6, gravity: 16}, {y: 6, score: 6, gravity: 16}]);
+});
+test('a blocked DAS repeat does not leave a burst of catch-up moves for the next piece', async () => {
+  assert.equal(await page.evaluate(() => {
+    const {G, step, spawn} = __YT;
+    G.cur = {type: 'O', rot: 0, x: 0, y: 0};
+    document.dispatchEvent(new KeyboardEvent('keydown', {code: 'ArrowLeft'}));
+    for (let i = 0; i < 40; i++) step(64);
+    spawn('O'); const x = G.cur.x;
+    step(1);
+    return x - G.cur.x;
+  }), 0);
+});
+test('keyboard focus stays in an open popover and Escape returns it to the opener', async () => {
+  await page.locator('#menuBtn').focus(); await page.keyboard.press('Enter');
+  assert.equal(await page.evaluate(() => document.getElementById('menuPop').contains(document.activeElement)), true);
+  for (let i = 0; i < 7; i++) await page.keyboard.press('Tab');
+  assert.equal(await page.evaluate(() => document.getElementById('menuPop').contains(document.activeElement)), true);
+  await page.keyboard.press('Escape');
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'menuBtn');
+  assert.equal(await page.locator('#menuPop').isVisible(), false);
+});
+test('a captured board click completing after blur must not resume the game', async () => {
+  const box = await page.locator('#board').boundingBox();
+  await page.mouse.move(box.x + 20, box.y + 20); await page.mouse.down();
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await page.mouse.up();
+  assert.equal(await page.evaluate(() => __YT.G.status), 'paused');
+});
+test('a real touch-pad click acts once, without a compatibility-click duplicate', async () => {
+  await page.evaluate(() => { __YT.G.cur = {type: 'T', rot: 0, x: 5, y: 0}; });
+  await page.locator('[data-act="cw"]').click();
+  assert.equal(await page.evaluate(() => __YT.G.cur.rot), 1);
+});
+test('a completed clear gives the remaining frame time to the new piece', async () => {
+  assert.deepEqual(await page.evaluate(() => {
+    const {G, step} = __YT;
+    G.cur = null; G.board[13].fill('I'); G.status = 'clearing'; G.clear = {rows: [13], t: 160};
+    step(40);
+    return {status: G.status, lines: G.lines, drop: G.dropAcc};
+  }), {status: 'playing', lines: 1, drop: 30});
+});
+test('locking gives the remaining frame time to the new piece', async () => {
+  await ground();
+  assert.equal(await page.evaluate(() => {
+    __YT.G.lockAcc = 490; __YT.step(30); return __YT.G.dropAcc;
+  }), 20);
+});
+test('time partition invariance spans lock, clear animation and the next spawn', async () => {
+  assert.equal(await page.evaluate(() => {
+    const {G, newGame, step} = __YT;
+    const run = frames => {
+      Math.random = () => .5; newGame();
+      G.board[13].fill('J'); G.board[13][5] = G.board[13][6] = null;
+      G.cur = {type: 'O', rot: 0, x: 5, y: 12}; G.lockAcc = 490;
+      frames.forEach(step);
+      return JSON.stringify(G);
+    };
+    const coarse = run([320]), fine = run(Array(20).fill(16));
+    const state = JSON.parse(coarse);
+    return coarse === fine && state.status === 'playing' && state.lines === 1 && state.dropAcc === 140;
+  }), true);
+});
+test('palette popover traps reverse Tab and restores focus on dismissal', async () => {
+  await page.locator('#paletteBtn').click();
+  await page.keyboard.press('Shift+Tab');
+  assert.equal(await page.evaluate(() => document.activeElement.getAttribute('data-accent')), 'red');
+  await page.keyboard.press('Tab');
+  assert.equal(await page.evaluate(() => document.activeElement.getAttribute('data-accent')), 'purple');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'paletteBtn');
+});
+test('modal Tab handling also includes editable controls', async () => {
+  await page.evaluate(() => __YT.openModal({title: 'Test', body: '<input id="modalInput">'}));
+  await page.locator('#modalInput').focus(); await page.keyboard.press('Shift+Tab');
+  assert.equal(await page.evaluate(() => document.activeElement.hasAttribute('data-ok')), true);
+  await page.keyboard.press('Tab');
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'modalInput');
 });

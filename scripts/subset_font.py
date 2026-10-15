@@ -12,6 +12,7 @@ Nebulove 字体子集化 & 内嵌
 """
 import argparse, base64, io, os, re, sys, tempfile, urllib.request
 from html import unescape
+from html.parser import HTMLParser
 FONT_URL = "https://raw.githubusercontent.com/lingyicute/Nebulove/main/Nebulove.woff2"
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_HTML = os.path.join(os.path.dirname(HERE), "index.html")
@@ -20,11 +21,89 @@ PUNCT = set("：，。！？；‘’“”（）【】—…·《》×＝÷＋�
 
 # 连同上一次生成的注释头一起匹配，避免重复运行时注释不断堆叠
 _GEN_COMMENT = r'/\*\s*=====\s*Nebulove[^*]*(?:\*(?!/)[^*]*)*\*/'
-# Match only Nebulove, not an unrelated @font-face preceding it.
-FONT_FACE_RE = re.compile(
-    r'(?:' + _GEN_COMMENT + r'\s*)*@font-face\s*\{'
-    r'(?=[^}]*font-family\s*:\s*(?:"Nebulove"|\'Nebulove\'|Nebulove)\s*;)'
-    r'[^}]*\}', re.I)
+# Mask CSS comments/strings without changing offsets. Unlike a global regex,
+# this keeps quoted delimiters and commented-out declarations out of structure.
+_CSS_TOKEN_RE = re.compile(r"/\*.*?(?:\*/|$)|\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'", re.S)
+_FONT_START_RE = re.compile(r'@font-face\s*\{', re.I)
+_FAMILY_RE = re.compile(r"(?:Nebulove|'Nebulove'|\"Nebulove\")", re.I)
+
+
+class StyleParser(HTMLParser):
+    """Record actual inline stylesheet offsets, never JS strings/HTML comments."""
+    CDATA_CONTENT_ELEMENTS = (
+        "script", "style", "textarea", "title", "xmp", "iframe", "noembed", "noframes", "noscript"
+    )
+
+    def __init__(self, html):
+        super().__init__(convert_charrefs=False)
+        # HTMLParser counts only LF as a line break (not all splitlines chars).
+        self.offsets = [0] + [m.end() for m in re.finditer('\n', html)]
+        self.in_style = False
+        self.styles = []
+        self.feed(html)
+        self.close()
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'style':
+            attributes = dict(attrs)
+            self.in_style = (attributes.get('type') or 'text/css').strip().lower() in ('', 'text/css')
+
+    def handle_endtag(self, tag):
+        if tag == 'style':
+            self.in_style = False
+
+    def handle_data(self, data):
+        if self.in_style:
+            line, col = self.getpos()
+            self.styles.append((self.offsets[line - 1] + col, data))
+
+
+def font_face_span(html):
+    """Find one unambiguous Nebulove face in inline CSS; fail before any I/O.
+
+    This is intentionally a narrow CSS scanner, not a general CSS evaluator.
+    Quoted values/comments and nested braces/parentheses retain their offsets.
+    Multiple Nebulove faces (e.g. unicode-range/weight variants) need an explicit
+    selection policy, so do not silently replace the first one.
+    """
+    matches = []
+    for offset, css in StyleParser(html).styles:
+        structure = _CSS_TOKEN_RE.sub(lambda m: ' ' * len(m[0]), css)
+        uncommented = _CSS_TOKEN_RE.sub(
+            lambda m: ' ' * len(m[0]) if m[0].startswith('/*') else m[0], css)
+        for match in _FONT_START_RE.finditer(structure):
+            start, body = match.start(), match.end()
+            depth, end = 1, body
+            while end < len(structure) and depth:
+                if structure[end] == '{':
+                    depth += 1
+                elif structure[end] == '}':
+                    depth -= 1
+                end += 1
+            if depth:
+                raise ValueError('未闭合的 @font-face 块，拒绝修改。')
+            # Split descriptors only at top-level semicolons, not in URL/string values.
+            family, part, parens = None, body, 0
+            for pos in range(body, end):
+                char = structure[pos]
+                if char == '(':
+                    parens += 1
+                elif char == ')':
+                    parens -= 1
+                if (char == ';' and parens == 0) or pos == end - 1:
+                    key, sep, value = uncommented[part:pos].partition(':')
+                    if sep and key.strip().lower() == 'font-family':
+                        family = value.strip()
+                    part = pos + 1
+            if family is None or not _FAMILY_RE.fullmatch(family):
+                continue
+            header = re.search(r'(?:' + _GEN_COMMENT + r'\s*)+$', css[:start])
+            if header:
+                start = header.start()
+            matches.append((offset + start, offset + end))
+    if len(matches) != 1:
+        raise ValueError('需要且只能有一个 Nebulove @font-face 块，找到 %d 个。' % len(matches))
+    return matches[0]
 
 
 def strip_non_render_text(html):
@@ -61,12 +140,12 @@ def build_subset(chars, ttf_path):
     from fontTools.subset import Subsetter, Options
 
     font = TTFont(ttf_path, recalcTimestamp=False)
-    subsetter = Subsetter(options=Options())
-    subsetter.populate(text="".join(sorted(chars)))
-    subsetter.subset(font)
-    font.flavor = "woff2"
-    buf = io.BytesIO()
     try:
+        subsetter = Subsetter(options=Options())
+        subsetter.populate(text="".join(sorted(chars)))
+        subsetter.subset(font)
+        font.flavor = "woff2"
+        buf = io.BytesIO()
         font.save(buf)
         data = buf.getvalue()
         covered = set((font.getBestCmap() or {}).keys())
@@ -97,6 +176,8 @@ def make_font_face(b64, woff_kb, b64_kb, count, mode, full_kb):
 
 
 def atomic_write(path, text):
+    # Preserve symlink entry points, as the former open(path, "w") did.
+    path = os.path.realpath(path)
     mode = os.stat(path).st_mode & 0o777
     temp_path = None
     try:
@@ -128,8 +209,10 @@ def main():
         sys.exit("找不到页面文件：%s" % args.html)
     with open(args.html, encoding="utf-8") as f:
         html = f.read()
-    if not FONT_FACE_RE.search(html):
-        sys.exit("页面里没有找到 @font-face 块，无法替换。")
+    try:
+        face_start, face_end = font_face_span(html)
+    except ValueError as exc:
+        sys.exit(str(exc))
 
     extra = ""
     if args.extra_chars:
@@ -165,14 +248,14 @@ def main():
     print("子集文件：%s" % keep)
     b64 = base64.b64encode(wofl).decode("ascii")
     new_face = make_font_face(b64, len(wofl) / 1024, len(b64) / 1024, len(covered), mode, full_kb)
-    new_html, n = FONT_FACE_RE.subn(lambda m: new_face, html, count=1)
+    new_html = html[:face_start] + new_face + html[face_end:]
     if new_html == html:
         print("页面已经是目标内容，未改动。")
         return
     # Replace atomically in the same filesystem; a failed write must not
     # truncate the only source/artifact. Preserve the original file mode.
     atomic_write(args.html, new_html)
-    print("已更新 %s（@font-face 替换 %d 处）" % (args.html, n))
+    print("已更新 %s（@font-face 替换 1 处）" % args.html)
     print("页面大小：%.0f KB → %.0f KB" % (len(html.encode()) / 1024, len(new_html.encode()) / 1024))
 
 
