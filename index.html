@@ -957,6 +957,7 @@ function finishClear(){
   updateDanger();
 }
 function gameOver(){
+  activationEpoch++;
   G.status='over';
   resetInput();
   G.cur=null;
@@ -971,6 +972,7 @@ function gameOver(){
   render();
 }
 function newGame(diff){
+  activationEpoch++;
   if(DIFF_KEYS.includes(diff)){ G.diff=diff; LS.set('yitetris.diff',diff); }   /* 与主题/配色/皮肤一致，难度也记住 */
   G.board=newBoard(); G.bag=[]; G.next=[]; G.hold=null; G.canHold=true;
   G.score=0; G.lines=0; G.combo=-1; G.lastBig=false; G.clear=null;
@@ -987,6 +989,7 @@ function newGame(diff){
   updateHud(); updateDiffChips(); renderPreviews(); updateDanger(); render();
 }
 function pauseGame(){
+  activationEpoch++;
   resetInput();
   if(G.status!=='playing'&&G.status!=='clearing') return;
   G.status='paused';
@@ -995,6 +998,7 @@ function pauseGame(){
 }
 function togglePause(){
   if(G.status==='paused'){
+    activationEpoch++;
     resetInput();
     G.status=G.clear?'clearing':'playing';
     lastTs=0;
@@ -1651,7 +1655,7 @@ function performAction(act){
   else if(act==='hold') doHold();
 }
 function pressInput(id,act,button){
-  if(heldInputs.has(id)||G.status!=='playing') return;
+  if(heldInputs.has(id)||(G.status!=='playing'&&G.status!=='clearing')) return;
   heldInputs.set(id,{act:act,button:button});
   if(button) button.classList.add('active');
   syncInput();
@@ -1667,12 +1671,12 @@ function releaseInput(id){
   syncInput();
 }
 let activationEpoch=0;
-function suspendGame(){ activationEpoch++; pauseGame(); }
-/* 原生按钮的 click 可能晚于 blur/visibilitychange：只取消跨越失焦的旧操作，
-   不阻止新的显式继续；结合操作来源记录，而非只凭 click.detail 接受事件。 */
+function suspendGame(){ pauseGame(); }
+/* 原生按钮的 click 可能晚于 blur/visibilitychange：只取消跨越状态切换的旧操作，
+   不阻止新的显式继续；Space 仅在 keyup 时产生 click，避免失焦未抬键残留阻塞后续无障碍点击。 */
 function bindActivationGuard(){
   const pointers=new Map();
-  let keyboard=null, released=null;
+  let spaceDown=null, keyboard=null, released=null;
   const buttonFor=e=>e.target&&e.target.closest?e.target.closest('button'):null;
   document.addEventListener('pointerdown',function(e){
     const button=buttonFor(e);
@@ -1681,31 +1685,41 @@ function bindActivationGuard(){
   document.addEventListener('pointerup',function(e){
     const activation=pointers.get(e.pointerId);
     if(!activation) return;
+    pointers.delete(e.pointerId);
     released=activation;
     // 默认 click 在 pointerup/keyup 后触发，下一任务再清理未产生 click 的操作。
     setTimeout(function(){
-      if(pointers.get(e.pointerId)===activation) pointers.delete(e.pointerId);
       if(released===activation) released=null;
     },0);
   },true);
   document.addEventListener('pointercancel',function(e){ pointers.delete(e.pointerId); },true);
   document.addEventListener('keydown',function(e){
     if(e.isComposing||e.ctrlKey||e.metaKey||e.altKey) return;
-    if(e.code!=='Space'&&e.code!=='Enter') return;
+    const isEnter=e.code==='Enter'||e.code==='NumpadEnter';
+    if(e.code!=='Space'&&!isEnter) return;
     const button=buttonFor(e);
     if(!button) return;
     if(e.repeat){ e.preventDefault(); return; }
-    keyboard={button:button,epoch:activationEpoch,code:e.code};
+    const activation={button:button,epoch:activationEpoch,code:e.code};
+    if(isEnter){
+      keyboard=activation;
+      setTimeout(function(){ if(keyboard===activation) keyboard=null; },0);
+    }else{
+      spaceDown=activation;
+    }
   },true);
   document.addEventListener('keyup',function(e){
-    const activation=keyboard;
-    if(!activation||activation.code!==e.code) return;
+    if(e.code!=='Space'||!spaceDown) return;
+    const activation=spaceDown;
+    spaceDown=null;
+    keyboard=activation;
     setTimeout(function(){ if(keyboard===activation) keyboard=null; },0);
   },true);
   document.addEventListener('click',function(e){
     const button=buttonFor(e);
-    const activation=e.detail===0?keyboard:(pointers.get(e.pointerId)||released);
+    const activation=e.detail===0?keyboard:released;
     if(e.detail===0) keyboard=null;
+    else released=null;
     if(activation&&activation.button===button&&activation.epoch!==activationEpoch){
       e.preventDefault(); e.stopImmediatePropagation();
     }
@@ -1749,7 +1763,7 @@ function bindTouchPad(){
       if(e.button!==0) return;
       e.preventDefault();
       if(G.status==='paused'){ togglePause(); return; }
-      if(G.status!=='playing') return;
+      if(G.status!=='playing'&&G.status!=='clearing') return;
       if(btn.setPointerCapture){ try{ btn.setPointerCapture(e.pointerId); }catch(err){} }
       pressInput('pointer:'+e.pointerId,act,btn);
     });
@@ -1790,12 +1804,9 @@ function bindGestures(){
     if(T.axis===1){
       const steps=Math.min(COLS,Math.floor(Math.abs(dx)/cell)), dir=dx<0?-1:1;
       for(let i=0;i<steps;i++){ doMove(dir); T.x+=dir*cell; T.moved=true; }
-    }else if(T.axis===2){
-      const steps=Math.min(ROWS,Math.floor(Math.abs(dy)/cell));
-      for(let i=0;i<steps;i++){
-        if(dy>0) softStep();
-        T.y+=(dy>0?1:-1)*cell; T.moved=true;
-      }
+    }else if(T.axis===2&&dy>0){
+      const steps=Math.min(ROWS,Math.floor(dy/cell));
+      for(let i=0;i<steps;i++){ softStep(); T.y+=cell; T.moved=true; }
     }
   });
   boardCv.addEventListener('pointerup',function(e){
@@ -1805,8 +1816,8 @@ function bindGestures(){
     const dt=Math.max(1,performance.now()-gesture.t0);
     const dx=e.clientX-gesture.sx, dy=e.clientY-gesture.sy;
     if(!gesture.moved&&Math.abs(dx)<14&&Math.abs(dy)<14&&dt<320) rotate(1);
-    else if(dy<-56&&Math.abs(dx)<70&&dt<420) doHold();
-    else if(dy>60&&Math.abs(dx)<70&&(dy/dt>0.85||gesture.axis===0)) hardDrop();
+    else if(!gesture.moved&&gesture.axis!==1&&dy<-56&&Math.abs(dx)<70&&dt<420) doHold();
+    else if(gesture.axis!==1&&dy>60&&Math.abs(dx)<70&&(dy/dt>0.85||gesture.axis===0)) hardDrop();
   });
   const cancel=function(e){ if(T&&T.id===e.pointerId) T=null; };
   boardCv.addEventListener('pointercancel',cancel);
