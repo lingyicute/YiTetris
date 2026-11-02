@@ -647,3 +647,64 @@ test('sessionStorage events do not replace the persisted score cache', async () 
     return document.getElementById('bestVal').textContent;
   }), '123');
 });
+
+test('assistive click after Space keydown and blur without keyup still works', async () => {
+  await page.locator('#pauseBtn').focus();
+  await page.keyboard.down('Space');
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await page.evaluate(() => document.getElementById('pauseBtn').click());
+  assert.equal(await page.evaluate(() => __YT.G.status), 'playing');
+});
+test('holding NumpadEnter on the pause button does not toggle repeatedly', async () => {
+  await page.locator('#pauseBtn').focus();
+  await page.keyboard.down('NumpadEnter');
+  await page.keyboard.down('NumpadEnter');
+  await page.keyboard.up('NumpadEnter');
+  assert.equal(await page.evaluate(() => __YT.G.status), 'paused');
+});
+test('a pointer press on pauseBtn interrupted by KeyP pause cannot unpause on release', async () => {
+  const box = await page.locator('#pauseBtn').boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.keyboard.press('KeyP');
+  await page.mouse.up();
+  assert.equal(await page.evaluate(() => __YT.G.status), 'paused');
+});
+test('board gesture upward movement does not soft-drop when finger moves slightly down above start', async () => {
+  assert.deepEqual(await page.evaluate(() => {
+    const board = document.getElementById('board');
+    const fire = (type, x, y) => board.dispatchEvent(new PointerEvent(type, {
+      pointerId: 1, pointerType: 'touch', button: 0, clientX: x, clientY: y, bubbles: true, cancelable: true
+    }));
+    __YT.G.cur = {type: 'O', rot: 0, x: 5, y: 0};
+    fire('pointerdown', 100, 200);
+    fire('pointermove', 100, 130);
+    fire('pointermove', 100, 175);
+    fire('pointerup', 100, 175);
+    return {y: __YT.G.cur.y, score: __YT.G.score};
+  }), {y: 0, score: 0});
+});
+test('horizontal board drag does not trigger hard drop or hold on diagonal release', async () => {
+  assert.deepEqual(await page.evaluate(() => {
+    const board = document.getElementById('board');
+    const fire = (type, x, y) => board.dispatchEvent(new PointerEvent(type, {
+      pointerId: 1, pointerType: 'touch', button: 0, clientX: x, clientY: y, bubbles: true, cancelable: true
+    }));
+    const piece = __YT.G.cur;
+    fire('pointerdown', 100, 100);
+    fire('pointermove', 160, 105);
+    fire('pointerup', 160, 170);
+    return {samePiece: __YT.G.cur === piece, hold: __YT.G.hold, cells: __YT.G.board.flat().filter(Boolean).length};
+  }), {samePiece: true, hold: null, cells: 0});
+});
+test('holding a direction pressed during line-clear animation moves the next piece after clear', async () => {
+  assert.equal(await page.evaluate(() => {
+    const {G, step} = __YT;
+    G.board[13].fill('I'); G.status = 'clearing'; G.cur = null; G.clear = {rows: [13], t: 100};
+    document.dispatchEvent(new KeyboardEvent('keydown', {code: 'ArrowLeft', bubbles: true, cancelable: true}));
+    step(70);
+    const xAtSpawn = G.cur.x;
+    step(200);
+    return G.cur.x < xAtSpawn;
+  }), true);
+});
