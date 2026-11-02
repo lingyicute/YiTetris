@@ -20,7 +20,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-orange.svg" alt="License: AGPL-3.0"></a>
-  <a href="index.html"><img src="https://img.shields.io/badge/Single%20File-121%20KB-blue" alt="Single File 121 KB"></a>
+  <a href="index.html"><img src="https://img.shields.io/badge/Single%20File-137%20KB-blue" alt="Single File 137 KB"></a>
   <a href="https://github.com/lingyicute/YiTetris"><img src="https://img.shields.io/badge/Dependencies-Zero-brightgreen" alt="Zero Dependencies"></a>
   <a href="https://github.com/lingyicute/YiTetris"><img src="https://img.shields.io/badge/Ads%20%26%20Trackers-Zero-brightgreen" alt="No Ads No Tracking"></a>
   <a href="https://github.com/lingyicute/YiTetris"><img src="https://img.shields.io/github/stars/lingyicute/YiTetris?style=flat&color=yellow" alt="GitHub Stars"></a>
@@ -60,7 +60,7 @@ Most browser Tetris clones get the pieces right and everything else wrong: rotat
 
 - **🎨 Material You & Polished Design**
   - **Dynamic theming**: eight accents, and the **piece colours are derived from the accent hue**, so the entire board retints when you switch palettes.
-  - Day / Night mode with the initial choice taken from `prefers-color-scheme`, a data-URI SVG favicon, `prefers-reduced-motion` support, and toast notifications for level-ups, records and state changes.
+  - Day / Night mode with the initial choice taken from `prefers-color-scheme`, a data-URI SVG favicon, `prefers-reduced-motion` support, and toast notifications for level-ups, records and state changes (shown statically under reduced motion).
   - The board is **square and driven by a single `SIZE` constant** — change it and the game, danger band and layout follow.
 
 - **🔒 100% Privacy, Offline & Ad-Free**
@@ -162,7 +162,8 @@ YT_BROWSER=webkit npm test
 - Held controls are cleared on pause/restart/game over, while directions held during a line-clear animation carry into the next piece. Opposite directions and keyboard aliases are tracked separately, and pointer cancellation/capture loss releases touch controls. A board gesture belongs to one pointer and one active piece, and horizontal drags cannot trigger a drop or hold on release.
 - `Space` on a focused button activates that button; when focus is not on a button, it remains hard drop. Browser shortcuts such as `Ctrl+P` are left alone.
 - Menu/palette focus stays inside the open popover; `Escape` returns focus to its opener even after clicking non-button popover space. A board click that finishes after focus loss cannot resume a paused game. Button activations started before a pause, restart, game-over or focus/visibility transition are discarded when their delayed click arrives. A fresh or assistive activation still works, while holding `Enter` or `NumpadEnter` on a button does not repeatedly activate it.
-- Best-score caches, the HUD and an open records dialog refresh when another same-origin tab changes or clears records; session storage and unrelated preference changes are ignored. When `localStorage` is blocked, records fall back to in-memory storage for the current session. Difficulty and palette buttons expose selection with `aria-pressed`.
+- Best-score caches, the HUD and an open records dialog refresh when another same-origin tab changes or clears records; session storage and unrelated preference changes are ignored. When `localStorage` is blocked or rejects a write, records fall back to in-memory storage for the current session, and that newer value is what later reads return until another tab changes the records. Difficulty and palette buttons expose selection with `aria-pressed`.
+- Game over always removes the danger highlight, and the combo toast shows the same count as the HUD.
 - Unchanged active frames skip canvas repainting. Movement, rotation, locking and clearing still update the board, and explicit `render()` calls (including theme/resize updates and direct debug board edits) always repaint.
 - DAS, soft drop, gravity, lock delay and clearing advance on one event timeline. Landing starts its lock timer at the landing event, blocked repeats consume their interval, and remaining frame time carries across locking/clearing. The existing 64 ms per-RAF catch-up cap is retained.
 
