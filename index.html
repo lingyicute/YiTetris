@@ -991,6 +991,7 @@ function gameOver(){
   if(isNew) toast('新纪录',G.score+' 分 · '+G.lines+' 行');
   updatePauseBtn();
   updateHud();
+  updateDanger();
   render();
 }
 function newGame(diff){
