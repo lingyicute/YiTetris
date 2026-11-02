@@ -662,10 +662,24 @@ html[data-skin="classic"] .board-wrap.danger{
 /* ---------- 基础工具 ---------- */
 const $ = (id)=>document.getElementById(id);
 const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+const memLS=Object.create(null);
 const LS = {
-  get(k,d){ try{ const v=localStorage.getItem(k); return v===null?d:JSON.parse(v); }catch(e){ return d; } },
-  set(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} },
-  del(k){ try{ localStorage.removeItem(k); }catch(e){} }
+  get(k,d){
+    let raw=null;
+    try{ raw=localStorage.getItem(k); delete memLS[k]; }
+    catch(e){ raw=Object.prototype.hasOwnProperty.call(memLS,k)?memLS[k]:null; }
+    if(raw===null) return d;
+    try{ return JSON.parse(raw); }catch(e){ return d; }
+  },
+  set(k,v){
+    const raw=JSON.stringify(v);
+    try{ localStorage.setItem(k,raw); delete memLS[k]; }
+    catch(e){ memLS[k]=raw; }
+  },
+  del(k){
+    delete memLS[k];
+    try{ localStorage.removeItem(k); }catch(e){}
+  }
 };
 function rr(c,x,y,w,h,r){
   if(w<=0||h<=0) return;
@@ -790,18 +804,26 @@ const heldInputs=new Map();   /* 按来源记录，避免别名键/多指互相�
 const bestKey = d => 'yitetris.best.'+d;
 function recordNumber(v){ return Number.isSafeInteger(v)&&v>=0?v:0; }
 function loadBest(d){
+  if(!DIFF_KEYS.includes(d)) return {score:0,lines:0};
   const b=LS.get(bestKey(d),null);
   if(!b||typeof b!=='object'||Array.isArray(b)) return {score:0,lines:0};
   return {score:recordNumber(b.score),lines:recordNumber(b.lines)};
 }
 function saveBest(d,score,lines){
+  if(!DIFF_KEYS.includes(d)) return {score:0,lines:0};
   const b=loadBest(d);
   const nb={score:Math.max(b.score,recordNumber(score)),lines:Math.max(b.lines,recordNumber(lines))};
   LS.set(bestKey(d),nb); bestCache[d]=nb.score; return nb;
 }
-const bestCache={};
-function refreshBest(d){ bestCache[d]=loadBest(d).score; return bestCache[d]; }
-function showedBest(d){ return (d in bestCache)?bestCache[d]:refreshBest(d); }
+const bestCache=Object.create(null);
+function refreshBest(d){
+  if(!DIFF_KEYS.includes(d)) return 0;
+  bestCache[d]=loadBest(d).score; return bestCache[d];
+}
+function showedBest(d){
+  if(!DIFF_KEYS.includes(d)) return 0;
+  return (d in bestCache)?bestCache[d]:refreshBest(d);
+}
 
 function collide(type,rot,x,y){
   const m=SHAPES[type][rot];
@@ -947,7 +969,7 @@ function finishClear(){
   for(let r=0;r<ROWS;r++){ if(rows.indexOf(r)<0) keep.push(G.board[r]); }
   while(keep.length<ROWS) keep.unshift(new Array(COLS).fill(null));
   G.board=keep;
-  const want=DIFFS[G.diff].start+Math.floor(G.lines/10);
+  const want=(DIFF_KEYS.includes(G.diff)?DIFFS[G.diff]:DIFFS.easy).start+Math.floor(G.lines/10);
   if(want>G.level){ G.level=want; toast('等级提升','Lv.'+G.level); }
   else toast(['消行','双消','三消','四连消'][n-1],'+'+pts+(G.combo>0?' · '+(G.combo+1)+' 连击':''));
   G.clear=null;
@@ -1229,7 +1251,7 @@ function drawSlot(c,x,y,box){
 let drawnBoard=null;
 function boardChanged(){
   const p=G.cur, d=drawnBoard;
-  return !!G.clear||!d||d.board!==G.board||d.cur!==p||d.status!==G.status||
+  return !!G.clear||!d||d.clear||d.board!==G.board||d.cur!==p||d.status!==G.status||
     (p&&(d.x!==p.x||d.y!==p.y||d.rot!==p.rot||d.type!==p.type));
 }
 function render(){
@@ -1293,7 +1315,7 @@ function render(){
     c.restore();
   }
   const p=G.cur;
-  drawnBoard={board:G.board,cur:p,status:G.status,x:p&&p.x,y:p&&p.y,
+  drawnBoard={board:G.board,cur:p,status:G.status,clear:!!G.clear,x:p&&p.x,y:p&&p.y,
     rot:p&&p.rot,type:p&&p.type};
 }
 function bounds(m){
@@ -1353,12 +1375,13 @@ const scoreVal=$('scoreVal'), bestVal=$('bestVal'), levelVal=$('levelVal'), line
       comboVal=$('comboVal'), heroSub=$('heroSub'), boardWrap=$('boardWrap'), overlay=$('overlay'),
       toastEl=$('toast');
 function updateHud(){
+  const diffCfg=DIFF_KEYS.includes(G.diff)?DIFFS[G.diff]:DIFFS.easy;
   if(scoreVal) scoreVal.textContent=G.score;
   if(levelVal) levelVal.textContent=G.level;
   if(linesVal) linesVal.textContent=G.lines;
   if(comboVal) comboVal.textContent=Math.max(0,G.combo);
   if(bestVal) bestVal.textContent=showedBest(G.diff);
-  if(heroSub) heroSub.textContent=DIFFS[G.diff].name+' · '+COLS+'×'+ROWS;
+  if(heroSub) heroSub.textContent=diffCfg.name+' · '+COLS+'×'+ROWS;
 }
 function updateDanger(){
   if(!boardWrap) return;
@@ -1381,7 +1404,15 @@ function updateDiffChips(){
 let toastTimer=0;
 function toast(text,sub){
   if(!toastEl) return;
-  toastEl.innerHTML='<b>'+text+'</b>'+(sub?'<span>'+sub+'</span>':'');
+  toastEl.textContent='';
+  const b=document.createElement('b');
+  b.textContent=text==null?'':String(text);
+  toastEl.appendChild(b);
+  if(sub){
+    const s=document.createElement('span');
+    s.textContent=String(sub);
+    toastEl.appendChild(s);
+  }
   toastEl.classList.remove('show');
   void toastEl.offsetWidth;
   toastEl.classList.add('show');
@@ -1500,14 +1531,17 @@ function howTo(){
     '<li>每消除 10 行提升一个等级，下落速度随之加快；方块顶到顶部无法放置时游戏结束。</li>'+
     '</ul>'});
 }
-function bestList(){
+function renderBestRows(){
   let rows='';
   for(let i=0;i<DIFF_KEYS.length;i++){
     const k=DIFF_KEYS[i], b=loadBest(k);
     rows+='<div class="rec-row'+(k===G.diff?' cur':'')+'"><span class="rec-name">'+DIFFS[k].name+'</span>'+
       '<span class="rec-val">'+b.score+'</span><span class="rec-sub">'+b.lines+' 行</span></div>';
   }
-  openModal({icon:'trophy',title:'最佳成绩',body:'<div class="rec-list">'+rows+'</div>',ok:'知道了'});
+  return rows;
+}
+function bestList(){
+  openModal({icon:'trophy',title:'最佳成绩',body:'<div class="rec-list">'+renderBestRows()+'</div>',ok:'知道了'});
 }
 function clearRecords(){
   openModal({icon:'trash',title:'清除记录',cancel:'取消',ok:'确定清除',
@@ -1845,6 +1879,7 @@ function loop(ts){
 }
 
 /* ---------- 初始化 ---------- */
+let initialized=false;
 function init(){
   const savedTheme=LS.get('yitetris.theme',null);
   theme=(savedTheme==='dark')?'dark':(savedTheme==='light'?'light':(root.getAttribute('data-theme')==='dark'?'dark':'light'));
@@ -1867,87 +1902,94 @@ function init(){
   updatePauseBtn();
   if(!G.board.length) G.board=newBoard();
 
-  /* 主题 / 配色 / 菜单 */
-  const themeBtn=$('themeBtn');
-  if(themeBtn) themeBtn.addEventListener('click',function(){ setTheme(theme==='dark'?'light':'dark'); });
-  if(paletteBtn) paletteBtn.addEventListener('click',function(){ togglePop('palette'); });
-  if(menuBtn) menuBtn.addEventListener('click',function(){ togglePop('menu'); });
-  if(scrim) scrim.addEventListener('click',closePops);
-  if(swatches) swatches.addEventListener('click',function(e){
-    const b=e.target.closest('.sw');
-    if(!b) return;
-    setAccent(b.getAttribute('data-accent'));
-  });
-  if(menuPop) menuPop.addEventListener('click',function(e){
-    const b=e.target.closest('.menu-item');
-    if(!b) return;
-    const k=b.getAttribute('data-menu');
-    if(k==='skin'){ setSkin(isClassic()?'flat':'classic'); return; }  /* 就地切换，浮层保持打开 */
-    closePops();
-    if(k==='how') howTo();
-    else if(k==='best') bestList();
-    else if(k==='clear') clearRecords();
-  });
+  if(!initialized){
+    initialized=true;
+    /* 主题 / 配色 / 菜单 */
+    const themeBtn=$('themeBtn');
+    if(themeBtn) themeBtn.addEventListener('click',function(){ setTheme(theme==='dark'?'light':'dark'); });
+    if(paletteBtn) paletteBtn.addEventListener('click',function(){ togglePop('palette'); });
+    if(menuBtn) menuBtn.addEventListener('click',function(){ togglePop('menu'); });
+    if(scrim) scrim.addEventListener('click',function(){ closePops(); });
+    if(swatches) swatches.addEventListener('click',function(e){
+      const b=e.target.closest('.sw');
+      if(!b) return;
+      setAccent(b.getAttribute('data-accent'));
+    });
+    if(menuPop) menuPop.addEventListener('click',function(e){
+      const b=e.target.closest('.menu-item');
+      if(!b) return;
+      const k=b.getAttribute('data-menu');
+      if(k==='skin'){ setSkin(isClassic()?'flat':'classic'); return; }  /* 就地切换，浮层保持打开 */
+      closePops();
+      if(k==='how') howTo();
+      else if(k==='best') bestList();
+      else if(k==='clear') clearRecords();
+    });
 
-  /* 难度 */
-  const row=$('diffRow');
-  if(row) row.addEventListener('click',function(e){
-    const b=e.target.closest('.chip');
-    if(!b) return;
-    const d=b.getAttribute('data-diff');
-    if(d===G.diff&&G.status==='playing') return;
-    newGame(d);
-  });
+    /* 难度 */
+    const row=$('diffRow');
+    if(row) row.addEventListener('click',function(e){
+      const b=e.target.closest('.chip');
+      if(!b) return;
+      const d=b.getAttribute('data-diff');
+      if(d===G.diff&&G.status==='playing') return;
+      newGame(d);
+    });
 
-  /* 顶栏按钮 */
-  const pauseBtn=$('pauseBtn'), restartBtn=$('restartBtn');
-  if(pauseBtn) pauseBtn.addEventListener('click',togglePause);
-  if(restartBtn) restartBtn.addEventListener('click',function(){ newGame(); });
+    /* 顶栏按钮 */
+    const pauseBtn=$('pauseBtn'), restartBtn=$('restartBtn');
+    if(pauseBtn) pauseBtn.addEventListener('click',togglePause);
+    if(restartBtn) restartBtn.addEventListener('click',function(){ newGame(); });
 
-  window.addEventListener('storage',function(e){
-    try{ if(e.storageArea!==localStorage) return; }catch(err){ return; }
-    if(e.key!==null&&!DIFF_KEYS.some(d=>e.key===bestKey(d))) return;
-    for(const d of DIFF_KEYS){
-      if(e.key===null||e.key===bestKey(d)) refreshBest(d);
+    window.addEventListener('storage',function(e){
+      try{ if(e.storageArea!==localStorage) return; }catch(err){ return; }
+      if(e.key!==null&&!DIFF_KEYS.some(d=>e.key===bestKey(d))) return;
+      for(const d of DIFF_KEYS){
+        if(e.key===null||e.key===bestKey(d)) refreshBest(d);
+      }
+      updateHud();
+      if(modal&&!modal.hidden){
+        const list=modal.querySelector('.rec-list');
+        if(list) list.innerHTML=renderBestRows();
+      }
+    });
+
+    bindActivationGuard();
+    bindKeys();
+    bindTouchPad();
+    bindGestures();
+
+    if(window.ResizeObserver){
+      let raf=0;
+      const ro=new ResizeObserver(function(){
+        if(raf) return;
+        raf=window.requestAnimationFrame(function(){ raf=0; sizeAll(); });
+      });
+      ro.observe(document.body);
     }
-    updateHud();
-  });
-
-  bindActivationGuard();
-  bindKeys();
-  bindTouchPad();
-  bindGestures();
+    let resizeTimer=0;
+    window.addEventListener('resize',function(){
+      sizeAll();                                   /* 立即响应 */
+      if(resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer=setTimeout(sizeAll,240);         /* 布局（含媒体查询切换）稳定后再算一次 */
+    });
+    /* 品牌字体（Nebulove）加载完成后文字宽度会变，顶栏徽标要重新判定一次 */
+    if(document.fonts&&document.fonts.ready&&document.fonts.ready.then){
+      document.fonts.ready.then(function(){ sizeAll(); });
+    }
+    window.addEventListener('orientationchange',function(){
+      setTimeout(sizeAll,120); setTimeout(sizeAll,420);
+    });
+    document.addEventListener('visibilitychange',function(){
+      if(document.hidden) suspendGame();
+    });
+    window.requestAnimationFrame(loop);
+  }
 
   /* 尺寸自适应 */
   sizeAll();
-  if(window.ResizeObserver){
-    let raf=0;
-    const ro=new ResizeObserver(function(){
-      if(raf) return;
-      raf=window.requestAnimationFrame(function(){ raf=0; sizeAll(); });
-    });
-    ro.observe(document.body);
-  }
-  let resizeTimer=0;
-  window.addEventListener('resize',function(){
-    sizeAll();                                   /* 立即响应 */
-    if(resizeTimer) clearTimeout(resizeTimer);
-    resizeTimer=setTimeout(sizeAll,240);         /* 布局（含媒体查询切换）稳定后再算一次 */
-  });
-  /* 品牌字体（Nebulove）加载完成后文字宽度会变，顶栏徽标要重新判定一次 */
-  if(document.fonts&&document.fonts.ready&&document.fonts.ready.then){
-    document.fonts.ready.then(function(){ sizeAll(); });
-  }
-  window.addEventListener('orientationchange',function(){
-    setTimeout(sizeAll,120); setTimeout(sizeAll,420);
-  });
-  document.addEventListener('visibilitychange',function(){
-    if(document.hidden) suspendGame();
-  });
-
   newGame(G.diff);
   if(!G.next.length) renderPreviews();
-  window.requestAnimationFrame(loop);
 }
 
 /* 调试与测试入口（不影响游戏） */
