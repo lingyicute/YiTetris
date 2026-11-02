@@ -857,3 +857,12 @@ test('toasts stay visible and then hide when reduced motion is requested', async
     await reduced.waitForFunction(() => getComputedStyle(document.getElementById('toast')).opacity === '0', null, {timeout: 3000, polling: 50});
   } finally { await context.close(); }
 });
+test('combo toast reports the same count as the HUD and the bonus formula', async () => {
+  assert.deepEqual(await page.evaluate(() => {
+    const {G, finishClear} = __YT;
+    const clear = () => { G.clear = {rows: [13], t: 170}; G.status = 'clearing'; finishClear(); };
+    clear(); const first = document.querySelector('#toast > span').textContent;
+    clear(); const second = document.querySelector('#toast > span').textContent;
+    return {first, second, hud: document.getElementById('comboVal').textContent};
+  }), {first: '+100', second: '+150 · 1 连击', hud: '1'});
+});
