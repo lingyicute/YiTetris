@@ -740,3 +740,62 @@ test('Shift+Tab from a non-tabbable element inside modal stays trapped in the di
   await page.keyboard.press('Shift+Tab');
   assert.equal(await page.evaluate(() => document.activeElement.hasAttribute('data-ok')), true);
 });
+
+test('best scores survive newGame and bestList in memory when localStorage is unavailable', async () => {
+  const restricted = await browser.newPage();
+  try {
+    await restricted.addInitScript(() => {
+      Object.defineProperty(window, 'localStorage', {get() { throw new DOMException('Denied', 'SecurityError'); }});
+    });
+    await restricted.goto(url);
+    const res = await restricted.evaluate(() => {
+      const {G, spawn, loadBest, newGame} = __YT;
+      G.board[0].fill('J'); G.score = 500; G.lines = 3;
+      spawn('O');
+      const loaded = loadBest('easy');
+      newGame();
+      return {loaded, hud: document.getElementById('bestVal').textContent};
+    });
+    assert.deepEqual(res, {loaded: {score: 500, lines: 3}, hud: '500'});
+  } finally { await restricted.close(); }
+});
+test('prototype difficulty keys do not leak functions to HUD or storage', async () => {
+  assert.deepEqual(await page.evaluate(() => {
+    __YT.G.diff = 'toString';
+    __YT.updateHud();
+    return {
+      best: document.getElementById('bestVal').textContent,
+      sub: document.getElementById('heroSub').textContent,
+      saved: __YT.saveBest('__proto__', 500, 10)
+    };
+  }), {best: '0', sub: '简单 · 14×14', saved: {score: 0, lines: 0}});
+});
+test('open best-score dialog refreshes when another tab modifies records', async () => {
+  const other = await page.context().newPage();
+  try {
+    await page.evaluate(() => __YT.bestList());
+    await other.goto(url);
+    await other.evaluate(() => localStorage.setItem('yitetris.best.easy', '{"score":654,"lines":9}'));
+    await page.waitForFunction(() =>
+      document.querySelector('.rec-row.cur .rec-val')?.textContent === '654' &&
+      document.querySelector('.rec-row.cur .rec-sub')?.textContent === '9 行',
+      null, {timeout: 2000, polling: 50});
+  } finally { await other.close(); }
+});
+test('toast renders text literally without interpreting HTML markup', async () => {
+  assert.deepEqual(await page.evaluate(() => {
+    __YT.toast('<img id="toastInjected">', '<b>sub</b>');
+    return {
+      injected: !!document.getElementById('toastInjected'),
+      title: document.querySelector('#toast > b')?.textContent,
+      sub: document.querySelector('#toast > span')?.textContent
+    };
+  }), {injected: false, title: '<img id="toastInjected">', sub: '<b>sub</b>'});
+});
+test('calling __YT.init() again does not duplicate key or button listeners', async () => {
+  await page.evaluate(() => __YT.init());
+  await page.keyboard.press('KeyP');
+  assert.equal(await page.evaluate(() => __YT.G.status), 'paused');
+  await page.locator('#paletteBtn').click();
+  assert.equal(await page.locator('#palettePop').isVisible(), true);
+});
