@@ -973,7 +973,7 @@ function finishClear(){
   G.board=keep;
   const want=(DIFF_KEYS.includes(G.diff)?DIFFS[G.diff]:DIFFS.easy).start+Math.floor(G.lines/10);
   if(want>G.level){ G.level=want; toast('等级提升','Lv.'+G.level); }
-  else toast(['消行','双消','三消','四连消'][n-1],'+'+pts+(G.combo>0?' · '+(G.combo+1)+' 连击':''));
+  else toast(['消行','双消','三消','四连消'][n-1],'+'+pts+(G.combo>0?' · '+G.combo+' 连击':''));
   G.clear=null;
   G.status='playing';
   spawn();
