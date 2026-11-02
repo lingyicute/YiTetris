@@ -21,11 +21,22 @@ PUNCT = set("：，。！？；‘’“”（）【】—…·《》×＝÷＋�
 
 # 连同上一次生成的注释头一起匹配，避免重复运行时注释不断堆叠
 _GEN_COMMENT = r'/\*\s*=====\s*Nebulove[^*]*(?:\*(?!/)[^*]*)*\*/'
+_GEN_COMMENT_RE = re.compile(_GEN_COMMENT, re.S)
 # Mask CSS comments/strings without changing offsets. Unlike a global regex,
 # this keeps quoted delimiters and commented-out declarations out of structure.
-_CSS_TOKEN_RE = re.compile(r"/\*.*?(?:\*/|$)|\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'", re.S)
+_CSS_TOKEN_RE = re.compile(
+    r"/\*.*?(?:\*/|$)|\"(?:\\.|[^\"\\])*(?:\"|$)|'(?:\\.|[^'\\])*(?:'|$)", re.S
+)
 _FONT_START_RE = re.compile(r'@font-face\s*\{', re.I)
 _FAMILY_RE = re.compile(r"(?:Nebulove|'Nebulove'|\"Nebulove\")", re.I)
+
+
+def is_css_style(attrs):
+    # HTML keeps the first occurrence of duplicate attributes.
+    attributes = {}
+    for key, value in attrs:
+        attributes.setdefault(key, value)
+    return (attributes.get('type') or 'text/css').strip().lower() in ('', 'text/css')
 
 
 class StyleParser(HTMLParser):
@@ -41,15 +52,13 @@ class StyleParser(HTMLParser):
         self.in_style = False
         self.styles = []
         self.feed(html)
+        if self.in_style or self.cdata_elem:
+            raise ValueError('未闭合的 <%s> 块，拒绝修改。' % (self.cdata_elem or 'style'))
         self.close()
 
     def handle_starttag(self, tag, attrs):
         if tag == 'style':
-            # HTML keeps the first occurrence of duplicate attributes.
-            attributes = {}
-            for key, value in attrs:
-                attributes.setdefault(key, value)
-            self.in_style = (attributes.get('type') or 'text/css').strip().lower() in ('', 'text/css')
+            self.in_style = is_css_style(attrs)
 
     def handle_endtag(self, tag):
         if tag == 'style':
@@ -100,9 +109,13 @@ def font_face_span(html):
                     part = pos + 1
             if family is None or not _FAMILY_RE.fullmatch(family):
                 continue
-            header = re.search(r'(?:' + _GEN_COMMENT + r'\s*)+$', css[:start])
-            if header:
-                start = header.start()
+            tokens = list(_CSS_TOKEN_RE.finditer(css, 0, start))
+            pos = start
+            for token in reversed(tokens):
+                if css[token.end():pos].strip() or not _GEN_COMMENT_RE.fullmatch(token.group(0)):
+                    break
+                pos = token.start()
+            start = pos
             matches.append((offset + start, offset + end))
     if len(matches) != 1:
         raise ValueError('需要且只能有一个 Nebulove @font-face 块，找到 %d 个。' % len(matches))
@@ -115,17 +128,25 @@ class TextParser(HTMLParser):
 
     def __init__(self, html):
         super().__init__(convert_charrefs=False)
+        self.html = html
+        self.offsets = [0] + [m.end() for m in re.finditer('\n', html)]
         self.in_style = False
         self.text = []
+        self.attrs = []
         self.feed(html)
         self.close()
 
+    def _raw_offset(self):
+        line, col = self.getpos()
+        return self.offsets[line - 1] + col
+
     def handle_starttag(self, tag, attrs):
-        if tag == 'style':
-            self.in_style = True
         if not self.in_style:
             # Include labels/tooltips and strings later consumed by JS too.
-            self.text.extend(value for key, value in attrs if value is not None)
+            # HTMLParser already decodes character references in attribute values.
+            self.attrs.extend(value for key, value in attrs if value is not None)
+        if tag == 'style':
+            self.in_style = is_css_style(attrs)
 
     def handle_endtag(self, tag):
         if tag == 'style':
@@ -136,10 +157,14 @@ class TextParser(HTMLParser):
             self.text.append(data)
 
     def handle_entityref(self, name):
-        self.handle_data('&' + name + ';')
+        end = self._raw_offset() + 1 + len(name)
+        semi = ';' if self.html[end:end + 1] == ';' else ''
+        self.handle_data('&' + name + semi)
 
     def handle_charref(self, name):
-        self.handle_data('&#' + name + ';')
+        end = self._raw_offset() + 2 + len(name)
+        semi = ';' if self.html[end:end + 1] == ';' else ''
+        self.handle_data('&#' + name + semi)
 
 
 def strip_non_render_text(html):
@@ -148,7 +173,8 @@ def strip_non_render_text(html):
     Script source is retained, including comment-like UI strings. This is a
     conservative collector, not a JavaScript evaluator or CSS content parser.
     """
-    return ' '.join(TextParser(html).text)
+    parser = TextParser(html)
+    return ' '.join(parser.text + parser.attrs)
 
 
 def collect_chars(html, all_text=False, extra=""):
@@ -156,8 +182,9 @@ def collect_chars(html, all_text=False, extra=""):
         chars = set(html) | set(unescape(html))
     else:
         # Keep raw text as well: entities in JS strings need not be HTML-decoded.
-        text = strip_non_render_text(html)
-        chars = set(text) | set(unescape(text))
+        parser = TextParser(html)
+        raw = ' '.join(parser.text)
+        chars = set(raw) | set(unescape(raw)) | set(' '.join(parser.attrs))
     chars |= ASCII | PUNCT | set(extra)
     chars.discard("\n")
     chars.discard("\r")

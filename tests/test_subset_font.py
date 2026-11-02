@@ -236,6 +236,33 @@ class FontTests(unittest.TestCase):
             self.assertTrue(result.startswith(prefix.encode('utf-8')))
             self.assertTrue(result.endswith(suffix.encode('utf-8')))
 
+    def test_unclosed_style_tag_is_rejected(self):
+        with self.assertRaises(ValueError):
+            font_span('<style>' + FACE)
+
+    def test_unclosed_css_string_in_font_face_is_rejected(self):
+        with self.assertRaises(ValueError):
+            font_span('<style>@font-face { font-family: "Nebulove"; src: url("unclosed }); }</style>')
+
+    def test_generated_comment_text_inside_outer_css_comment_is_not_sliced(self):
+        note = '/* note: /* ===== Nebulove old ===== */\n'
+        html = '<style>' + note + FACE + '</style>'
+        start, end = font_span(html)
+        self.assertEqual(html[:start], '<style>' + note)
+        self.assertEqual(html[start:end], FACE)
+
+    def test_non_css_style_blocks_and_style_attributes_retain_visible_text(self):
+        html = '<style type="text/plain">梨</style><style title="鱼">/* 鸟 */</style>'
+        chars = font.collect_chars(html)
+        self.assertTrue(set('梨鱼') <= chars)
+        self.assertNotIn('鸟', chars)
+
+    def test_attributes_are_not_double_unescaped_and_bare_ampersands_keep_source_form(self):
+        chars = font.collect_chars('<span title="&amp;#x68A8;">a=1&notin=2</span><p>&#x9C7C;</p>')
+        self.assertIn('鱼', chars)
+        self.assertNotIn('梨', chars)
+        self.assertNotIn('∉', chars)
+
 
 if __name__ == '__main__':
     unittest.main()
