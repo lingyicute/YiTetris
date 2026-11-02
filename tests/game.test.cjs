@@ -799,3 +799,21 @@ test('calling __YT.init() again does not duplicate key or button listeners', asy
   await page.locator('#paletteBtn').click();
   assert.equal(await page.locator('#palettePop').isVisible(), true);
 });
+test('game over removes the danger highlight however it is reached', async () => {
+  assert.deepEqual(await page.evaluate(() => {
+    const {G, CONST, doHold, lockPiece, updateDanger} = __YT;
+    const wrap = document.getElementById('boardWrap');
+    const result = {};
+    for (const via of ['hold', 'lockout']) {
+      __YT.newGame('easy');
+      G.board = Array.from({length: CONST.ROWS}, (_, r) => Array.from({length: CONST.COLS}, (_, c) => r < 3 && c > 0 ? 'I' : null));
+      if (via === 'hold') { G.hold = 'O'; G.cur = {type: 'T', rot: 0, x: 5, y: 6}; }
+      else G.cur = {type: 'T', rot: 0, x: 0, y: -1};
+      updateDanger();
+      const before = wrap.classList.contains('danger');
+      via === 'hold' ? doHold() : lockPiece();
+      result[via] = [before, G.status, wrap.classList.contains('danger')];
+    }
+    return result;
+  }), {hold: [true, 'over', false], lockout: [true, 'over', false]});
+});
