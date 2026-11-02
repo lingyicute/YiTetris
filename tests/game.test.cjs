@@ -845,3 +845,15 @@ test('a record change in another tab replaces an in-memory fallback value', asyn
     await page.waitForFunction(() => document.getElementById('bestVal').textContent === '42', null, {timeout: 2000, polling: 50});
   } finally { await other.close(); }
 });
+test('toasts stay visible and then hide when reduced motion is requested', async () => {
+  const context = await browser.newContext({reducedMotion: 'reduce'});
+  const reduced = await context.newPage();
+  try {
+    await reduced.goto(url);
+    await reduced.waitForFunction(() => window.__YT?.G.cur);
+    await reduced.evaluate(() => __YT.toast('新纪录', '100'));
+    await reduced.waitForTimeout(100);
+    assert.equal(await reduced.evaluate(() => getComputedStyle(document.getElementById('toast')).opacity), '1');
+    await reduced.waitForFunction(() => getComputedStyle(document.getElementById('toast')).opacity === '0', null, {timeout: 3000, polling: 50});
+  } finally { await context.close(); }
+});

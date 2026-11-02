@@ -224,7 +224,6 @@ html[data-theme="dark"] .icon-btn .ic-moon{display:none}
 /* 危险提示：Material You 的「错误轮廓 + 容器微染」，不用高饱和粗描边 */
 .board-wrap.danger{background:var(--danger-bg);box-shadow:0 0 0 2px var(--danger-line)}
 #board{display:block;width:100%;aspect-ratio:1/1;border-radius:var(--r-md);touch-action:none;cursor:default}
-.board-wrap.danger #board{cursor:pointer}
 .toast{
   position:absolute;z-index:5;left:50%;top:16%;transform:translate(-50%,0);pointer-events:none;
   display:flex;align-items:baseline;gap:8px;white-space:nowrap;
@@ -466,6 +465,8 @@ html[data-skin="classic"] .board-wrap.danger{
 }
 @media (prefers-reduced-motion:reduce){
   *{animation-duration:.01ms!important;transition-duration:.01ms!important}
+  /* toastPop 以透明结束；动画被压到瞬时后提示会永远不可见，改为静态显示（计时器仍会移除 .show） */
+  .toast.show{animation:none;opacity:1}
 }
 </style>
 <style>
