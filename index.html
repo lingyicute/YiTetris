@@ -665,9 +665,10 @@ const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
 const memLS=Object.create(null);
 const LS = {
   get(k,d){
+    /* memLS 只保存写入 localStorage 失败的值（写入成功会删除），因此它比存储里的旧值更新 */
     let raw=null;
-    try{ raw=localStorage.getItem(k); delete memLS[k]; }
-    catch(e){ raw=Object.prototype.hasOwnProperty.call(memLS,k)?memLS[k]:null; }
+    if(Object.prototype.hasOwnProperty.call(memLS,k)) raw=memLS[k];
+    else{ try{ raw=localStorage.getItem(k); }catch(e){} }
     if(raw===null) return d;
     try{ return JSON.parse(raw); }catch(e){ return d; }
   },
@@ -1944,6 +1945,9 @@ function init(){
 
     window.addEventListener('storage',function(e){
       try{ if(e.storageArea!==localStorage) return; }catch(err){ return; }
+      /* 其它标签页的改动更新：丢弃本页的内存兜底值，避免它盖住新数据 */
+      if(e.key===null) for(const k in memLS) delete memLS[k];
+      else delete memLS[e.key];
       if(e.key!==null&&!DIFF_KEYS.some(d=>e.key===bestKey(d))) return;
       for(const d of DIFF_KEYS){
         if(e.key===null||e.key===bestKey(d)) refreshBest(d);

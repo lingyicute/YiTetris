@@ -817,3 +817,31 @@ test('game over removes the danger highlight however it is reached', async () =>
     return result;
   }), {hold: [true, 'over', false], lockout: [true, 'over', false]});
 });
+test('records written while localStorage rejects writes are not lost on the next read', async () => {
+  assert.deepEqual(await page.evaluate(() => {
+    const {saveBest, loadBest} = __YT;
+    saveBest('easy', 100, 5);
+    const setItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = () => { throw new DOMException('Quota', 'QuotaExceededError'); };
+    try { saveBest('easy', 500, 9); } finally { Storage.prototype.setItem = setItem; }
+    const first = loadBest('easy'), second = loadBest('easy');
+    saveBest('easy', 600, 9);
+    return {first, second, stored: JSON.parse(localStorage.getItem('yitetris.best.easy')), later: loadBest('easy')};
+  }), {
+    first: {score: 500, lines: 9}, second: {score: 500, lines: 9},
+    stored: {score: 600, lines: 9}, later: {score: 600, lines: 9}
+  });
+});
+test('a record change in another tab replaces an in-memory fallback value', async () => {
+  await page.evaluate(() => {
+    const setItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = () => { throw new DOMException('Quota', 'QuotaExceededError'); };
+    try { __YT.saveBest('easy', 500, 9); } finally { Storage.prototype.setItem = setItem; }
+  });
+  const other = await page.context().newPage();
+  try {
+    await other.goto(url);
+    await other.evaluate(() => localStorage.setItem('yitetris.best.easy', '{"score":42,"lines":1}'));
+    await page.waitForFunction(() => document.getElementById('bestVal').textContent === '42', null, {timeout: 2000, polling: 50});
+  } finally { await other.close(); }
+});
