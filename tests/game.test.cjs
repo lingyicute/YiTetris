@@ -708,3 +708,35 @@ test('holding a direction pressed during line-clear animation moves the next pie
     return G.cur.x < xAtSpawn;
   }), true);
 });
+
+test('clicking non-button popover title then pressing Escape still restores focus to opener', async () => {
+  await page.locator('#paletteBtn').click();
+  await page.locator('#palettePop .pop-title').click();
+  await page.keyboard.press('Escape');
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'paletteBtn');
+  assert.equal(await page.locator('#palettePop').isVisible(), false);
+});
+test('opening a modal while a popover is open closes the popover and restores focus on close', async () => {
+  await page.locator('#menuBtn').click();
+  await page.evaluate(() => __YT.howTo());
+  assert.equal(await page.locator('#menuPop').isVisible(), false);
+  await page.keyboard.press('Escape');
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'menuBtn');
+});
+test('replacing an open modal preserves the original pre-modal focus target', async () => {
+  await page.locator('#themeBtn').focus();
+  await page.evaluate(() => { __YT.howTo(); __YT.bestList(); });
+  await page.keyboard.press('Escape');
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'themeBtn');
+});
+test('pause controls cannot resume play while a modal or popover remains open', async () => {
+  await page.evaluate(() => __YT.howTo());
+  await page.evaluate(() => document.getElementById('pauseBtn').click());
+  assert.equal(await page.evaluate(() => __YT.G.status), 'paused');
+});
+test('Shift+Tab from a non-tabbable element inside modal stays trapped in the dialog', async () => {
+  await page.evaluate(() => __YT.openModal({title: 'Trap', cancel: 'Cancel', body: '<div id="box" tabindex="-1">text</div>'}));
+  await page.locator('#box').focus();
+  await page.keyboard.press('Shift+Tab');
+  assert.equal(await page.evaluate(() => document.activeElement.hasAttribute('data-ok')), true);
+});
