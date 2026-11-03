@@ -24,6 +24,9 @@
 /* ============ 设计令牌（Material You 色调） ============ */
 :root{
   --h:266;
+  /* viewport-fit=cover 下内容会延伸到刘海/圆角/手势条后面，需要自己避让 */
+  --safe-t:env(safe-area-inset-top,0px); --safe-r:env(safe-area-inset-right,0px);
+  --safe-b:env(safe-area-inset-bottom,0px); --safe-l:env(safe-area-inset-left,0px);
   --r-xl:26px; --r-lg:22px; --r-md:18px; --r-sm:13px;
   --ease:cubic-bezier(.22,.9,.24,1);
 }
@@ -78,10 +81,11 @@ html[data-theme="dark"]{
   --shadow-sm:0 6px 18px hsl(var(--h) 60% 2% / .45);
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;padding:0}
+html,body{margin:0}
 html{-webkit-text-size-adjust:100%}
 body{
   min-height:100dvh;
+  padding:var(--safe-t) var(--safe-r) var(--safe-b) var(--safe-l);
   background:var(--bg);
   color:var(--text);
   font-family:"Nebulove","HarmonyOS Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
@@ -137,7 +141,7 @@ html[data-theme="dark"] .icon-btn .ic-moon{display:none}
 /* ============ 浮层：配色 / 菜单 ============ */
 .scrim{position:fixed;inset:0;z-index:40;background:transparent}
 .popover{
-  position:fixed;z-index:50;top:66px;right:max(12px,calc((100vw - 1080px)/2 + 16px));
+  position:fixed;z-index:50;top:calc(66px + var(--safe-t));right:max(calc(12px + var(--safe-r)),calc((100vw - 1080px)/2 + 16px));
   background:var(--sheet);border-radius:var(--r-lg);box-shadow:var(--shadow);
   border:1px solid var(--line);padding:14px;transform-origin:top right;
   animation:popIn .22s var(--ease);
@@ -322,7 +326,8 @@ kbd{
 .help-note{font-size:12.5px;font-weight:700;color:var(--text-dim);opacity:.9;line-height:1.9;padding-top:4px}
 
 /* ============ 弹窗 ============ */
-.modal{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:20px}
+.modal{position:fixed;inset:0;z-index:80;display:grid;place-items:center;
+  padding:max(20px,var(--safe-t)) max(20px,var(--safe-r)) max(20px,var(--safe-b)) max(20px,var(--safe-l))}
 .modal-bg{position:absolute;inset:0;background:hsl(var(--h) 40% 4% / .5);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);animation:fadeIn .2s var(--ease)}
 .modal-card{
   position:relative;width:min(400px,100%);max-height:86dvh;overflow:auto;
@@ -392,7 +397,7 @@ html[data-skin="classic"] .board-wrap.danger{
   .col-right .help{order:5}
   .board-wrap{max-width:var(--bw);margin:0}
   .hero h1{font-size:36px}
-  .popover{top:74px}
+  .popover{top:calc(74px + var(--safe-t))}
   /* 左栏较窄：收窄圆形按钮与卡片内边距，保持单行排布 */
   .stats{gap:8px}
   .stats .stat{padding:8px 10px 10px}
