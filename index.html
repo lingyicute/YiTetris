@@ -1946,7 +1946,7 @@ function init(){
       const b=e.target.closest('.chip');
       if(!b) return;
       const d=b.getAttribute('data-diff');
-      if(d===G.diff&&G.status==='playing') return;
+      if(d===G.diff&&G.status!=='over') return;   /* 暂停/消行中点当前难度不应丢掉对局 */
       newGame(d);
     });
 

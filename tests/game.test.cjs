@@ -402,6 +402,20 @@ test('keyboard-activated controls keep focus after the click', async () => {
   await page.locator('#restartBtn').focus(); await page.keyboard.press('Enter');
   assert.equal(await page.evaluate(() => document.activeElement.id), 'restartBtn');
 });
+test('choosing the current difficulty keeps a paused or clearing game', async () => {
+  for (const status of ['paused', 'clearing']) {
+    await page.evaluate(status => {
+      __YT.newGame('easy'); __YT.G.score = 321;
+      if (status === 'paused') document.getElementById('pauseBtn').click();
+      else { __YT.G.clear = {rows: [13], t: 0}; __YT.G.status = 'clearing'; }
+    }, status);
+    await page.locator('[data-diff="easy"]').click();
+    assert.deepEqual(await page.evaluate(() => ({status: __YT.G.status, score: __YT.G.score})), {status, score: 321});
+  }
+  await page.evaluate(() => { __YT.G.status = 'over'; });
+  await page.locator('[data-diff="easy"]').click();
+  assert.equal(await page.evaluate(() => __YT.G.status), 'playing');
+});
 test('restart shortcut repeats are ignored', async () => {
   assert.equal(await page.evaluate(() => {
     __YT.G.score = 123;
