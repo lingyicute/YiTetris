@@ -20,7 +20,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-orange.svg" alt="License: AGPL-3.0"></a>
-  <a href="index.html"><img src="https://img.shields.io/badge/Single%20File-138%20KB-blue" alt="Single File 138 KB"></a>
+  <a href="index.html"><img src="https://img.shields.io/badge/Single%20File-139%20KB-blue" alt="Single File 139 KB"></a>
   <a href="https://github.com/lingyicute/YiTetris"><img src="https://img.shields.io/badge/Dependencies-Zero-brightgreen" alt="Zero Dependencies"></a>
   <a href="https://github.com/lingyicute/YiTetris"><img src="https://img.shields.io/badge/Ads%20%26%20Trackers-Zero-brightgreen" alt="No Ads No Tracking"></a>
   <a href="https://github.com/lingyicute/YiTetris"><img src="https://img.shields.io/github/stars/lingyicute/YiTetris?style=flat&color=yellow" alt="GitHub Stars"></a>
@@ -163,6 +163,7 @@ YT_BROWSER=webkit npm test
 - `Space` on a focused button activates that button; when focus is not on a button, it remains hard drop. Pointer clicks release button focus (keyboard activation keeps it), so Space hard-drops after clicking restart, theme or difficulty. Choosing the current difficulty while paused or clearing keeps the game; only a finished game restarts. Browser shortcuts such as `Ctrl+P` are left alone.
 - Menu/palette focus stays inside the open popover; `Escape` returns focus to its opener even after clicking non-button popover space. A board click that finishes after focus loss cannot resume a paused game. Button activations started before a pause, restart, game-over or focus/visibility transition are discarded when their delayed click arrives. A fresh or assistive activation still works, while holding `Enter` or `NumpadEnter` on a button does not repeatedly activate it.
 - Best-score caches, the HUD and an open records dialog refresh when another same-origin tab changes or clears records; session storage and unrelated preference changes are ignored. When `localStorage` is blocked or rejects a write, records fall back to in-memory storage for the current session, and that newer value is what later reads return until another tab changes the records. Difficulty and palette buttons expose selection with `aria-pressed`.
+- The page is laid out inside the device safe area (`viewport-fit=cover` with `env(safe-area-inset-*)`), buttons opt out of double-tap zoom, and the hold/next canvases expose their pieces through `aria-label`. If `localStorage` refuses to delete a record, clearing still hides the old value for the session.
 - Game over always removes the danger highlight, and the combo toast shows the same count as the HUD.
 - Unchanged active frames skip canvas repainting. Movement, rotation, locking and clearing still update the board, and explicit `render()` calls (including theme/resize updates and direct debug board edits) always repaint.
 - DAS, soft drop, gravity, lock delay and clearing advance on one event timeline. Landing starts its lock timer at the landing event, blocked repeats consume their interval, and remaining frame time carries across locking/clearing. The existing 64 ms per-RAF catch-up cap is retained.
