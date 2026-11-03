@@ -389,6 +389,19 @@ test('Space on a focused control activates the control, not hard drop', async ()
   await page.locator('#themeBtn').focus(); await page.keyboard.press('Space');
   assert.equal(await page.evaluate(() => __YT.G.board.flat().filter(Boolean).length), 0);
 });
+test('Space hard-drops after a mouse click on a control instead of re-activating it', async () => {
+  for (const selector of ['#restartBtn', '#themeBtn', '[data-diff="medium"]']) {
+    await page.evaluate(() => __YT.newGame('easy'));
+    await page.locator(selector).click();
+    await page.evaluate(() => __YT.newGame());
+    await page.keyboard.press('Space');
+    assert.equal(await page.evaluate(() => __YT.G.board.flat().filter(Boolean).length), 4, selector);
+  }
+});
+test('keyboard-activated controls keep focus after the click', async () => {
+  await page.locator('#restartBtn').focus(); await page.keyboard.press('Enter');
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'restartBtn');
+});
 test('restart shortcut repeats are ignored', async () => {
   assert.equal(await page.evaluate(() => {
     __YT.G.score = 123;
