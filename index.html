@@ -1350,9 +1350,13 @@ function drawPieceBox(c,type,bx,by,bw,bh,cell){
     drawTile(c,ox+col*cell,oy+r*cell,cell,hue,1);
   }
 }
+/* 画布内容读屏读不到：把当前暂存与队列写进 aria-label */
+function setLabel(el,text){ if(el&&el.getAttribute('aria-label')!==text) el.setAttribute('aria-label',text); }
 function renderPreviews(){
   const ch=holdCv&&holdCv._ctx;
   const cn=nextCv&&nextCv._ctx;
+  setLabel(holdCv,'暂存方块：'+(G.hold||'空'));
+  setLabel(nextCv,'接下来的三个方块：'+(G.next.slice(0,3).join('、')||'无'));
   if(!C) return;
   /* 统一格径：以「暂存/单个预览格」的尺寸为准，确保两处方块视觉大小一致 */
   const unit=Math.min(holdCv&&holdCv._w?holdCv._w:80, holdCv&&holdCv._h?holdCv._h:80);
