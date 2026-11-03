@@ -20,7 +20,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-orange.svg" alt="License: AGPL-3.0"></a>
-  <a href="index.html"><img src="https://img.shields.io/badge/Single%20File-137%20KB-blue" alt="Single File 137 KB"></a>
+  <a href="index.html"><img src="https://img.shields.io/badge/Single%20File-138%20KB-blue" alt="Single File 138 KB"></a>
   <a href="https://github.com/lingyicute/YiTetris"><img src="https://img.shields.io/badge/Dependencies-Zero-brightgreen" alt="Zero Dependencies"></a>
   <a href="https://github.com/lingyicute/YiTetris"><img src="https://img.shields.io/badge/Ads%20%26%20Trackers-Zero-brightgreen" alt="No Ads No Tracking"></a>
   <a href="https://github.com/lingyicute/YiTetris"><img src="https://img.shields.io/github/stars/lingyicute/YiTetris?style=flat&color=yellow" alt="GitHub Stars"></a>
@@ -160,7 +160,7 @@ YT_BROWSER=webkit npm test
 - Successful grounded moves/rotations consume the bounded lock-reset budget, including multiple operations in one animation frame. After the budget is exhausted, temporarily leaving a ledge no longer erases elapsed lock time.
 - Opening menus/dialogs, losing window focus or hiding the page pauses the game. A pending clear freezes immediately and resumes from the same progress. Closing a menu/dialog does **not** automatically resume play; use `P` or the resume button, and play cannot resume while a menu/dialog remains open.
 - Held controls are cleared on pause/restart/game over, while directions held during a line-clear animation carry into the next piece. Opposite directions and keyboard aliases are tracked separately, and pointer cancellation/capture loss releases touch controls. A board gesture belongs to one pointer and one active piece, and horizontal drags cannot trigger a drop or hold on release.
-- `Space` on a focused button activates that button; when focus is not on a button, it remains hard drop. Browser shortcuts such as `Ctrl+P` are left alone.
+- `Space` on a focused button activates that button; when focus is not on a button, it remains hard drop. Pointer clicks release button focus (keyboard activation keeps it), so Space hard-drops after clicking restart, theme or difficulty. Choosing the current difficulty while paused or clearing keeps the game; only a finished game restarts. Browser shortcuts such as `Ctrl+P` are left alone.
 - Menu/palette focus stays inside the open popover; `Escape` returns focus to its opener even after clicking non-button popover space. A board click that finishes after focus loss cannot resume a paused game. Button activations started before a pause, restart, game-over or focus/visibility transition are discarded when their delayed click arrives. A fresh or assistive activation still works, while holding `Enter` or `NumpadEnter` on a button does not repeatedly activate it.
 - Best-score caches, the HUD and an open records dialog refresh when another same-origin tab changes or clears records; session storage and unrelated preference changes are ignored. When `localStorage` is blocked or rejects a write, records fall back to in-memory storage for the current session, and that newer value is what later reads return until another tab changes the records. Difficulty and palette buttons expose selection with `aria-pressed`.
 - Game over always removes the danger highlight, and the combo toast shows the same count as the HUD.
