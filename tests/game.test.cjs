@@ -866,6 +866,20 @@ test('records written while localStorage rejects writes are not lost on the next
     stored: {score: 600, lines: 9}, later: {score: 600, lines: 9}
   });
 });
+test('hold and next canvases describe their pieces to assistive technology', async () => {
+  const labels = () => page.evaluate(() => ({
+    hold: document.getElementById('holdCv').getAttribute('aria-label'),
+    next: document.getElementById('nextCv').getAttribute('aria-label'),
+    queue: __YT.G.next.join('、'), cur: __YT.G.cur.type
+  }));
+  let l = await labels();
+  assert.equal(l.hold, '暂存方块：空');
+  assert.equal(l.next, '接下来的三个方块：' + l.queue);
+  await page.evaluate(() => __YT.doHold());
+  const after = await labels();
+  assert.equal(after.hold, '暂存方块：' + l.cur);
+  assert.equal(after.next, '接下来的三个方块：' + after.queue);
+});
 test('clearing records still works when localStorage rejects removal', async () => {
   assert.deepEqual(await page.evaluate(() => {
     const {saveBest, loadBest, bestList} = __YT;
