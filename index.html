@@ -1769,6 +1769,17 @@ function bindActivationGuard(){
     }
   },true);
 }
+/* 鼠标/触屏点按过的按钮会一直保留焦点，之后的空格会被当成「激活该按钮」
+   （重开、换难度、切主题……），而不是硬降。指针点击后释放焦点；
+   键盘激活（detail=0）与弹窗/浮层内的控件仍保留焦点。 */
+function bindPointerBlur(){
+  document.addEventListener('click',function(e){
+    if(e.detail===0) return;
+    const button=e.target&&e.target.closest?e.target.closest('button'):null;
+    if(!button||button.closest('#modal,.popover')) return;
+    if(document.activeElement===button) button.blur();
+  });
+}
 function bindKeys(){
   document.addEventListener('keydown',function(e){
     if(e.isComposing||e.ctrlKey||e.metaKey||e.altKey) return;
@@ -1961,6 +1972,7 @@ function init(){
     });
 
     bindActivationGuard();
+    bindPointerBlur();
     bindKeys();
     bindTouchPad();
     bindGestures();
