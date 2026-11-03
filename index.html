@@ -674,7 +674,7 @@ const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
 const memLS=Object.create(null);
 const LS = {
   get(k,d){
-    /* memLS 只保存写入 localStorage 失败的值（写入成功会删除），因此它比存储里的旧值更新 */
+    /* memLS 只保存写入/删除 localStorage 失败的结果（成功会移除），因此它比存储里的旧值更新；null 表示已删除 */
     let raw=null;
     if(Object.prototype.hasOwnProperty.call(memLS,k)) raw=memLS[k];
     else{ try{ raw=localStorage.getItem(k); }catch(e){} }
@@ -687,8 +687,9 @@ const LS = {
     catch(e){ memLS[k]=raw; }
   },
   del(k){
-    delete memLS[k];
-    try{ localStorage.removeItem(k); }catch(e){}
+    /* 删除失败时留下 null 墓碑：否则下一次读取会把存储里的旧值读回来 */
+    memLS[k]=null;
+    try{ localStorage.removeItem(k); delete memLS[k]; }catch(e){}
   }
 };
 function rr(c,x,y,w,h,r){

@@ -866,6 +866,21 @@ test('records written while localStorage rejects writes are not lost on the next
     stored: {score: 600, lines: 9}, later: {score: 600, lines: 9}
   });
 });
+test('clearing records still works when localStorage rejects removal', async () => {
+  assert.deepEqual(await page.evaluate(() => {
+    const {saveBest, loadBest, bestList} = __YT;
+    saveBest('easy', 500, 9);
+    const removeItem = Storage.prototype.removeItem;
+    Storage.prototype.removeItem = () => { throw new DOMException('Denied', 'SecurityError'); };
+    try {
+      document.querySelector('[data-menu="clear"]').click();
+      document.querySelector('[data-ok]').click();
+    } finally { Storage.prototype.removeItem = removeItem; }
+    const cleared = loadBest('easy');
+    saveBest('easy', 70, 2);
+    return {cleared, later: loadBest('easy'), hud: document.getElementById('bestVal').textContent};
+  }), {cleared: {score: 0, lines: 0}, later: {score: 70, lines: 2}, hud: '0'});
+});
 test('a record change in another tab replaces an in-memory fallback value', async () => {
   await page.evaluate(() => {
     const setItem = Storage.prototype.setItem;
