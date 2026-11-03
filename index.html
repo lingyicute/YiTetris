@@ -1381,7 +1381,7 @@ function renderPreviews(){
     for(let i=0;i<3;i++){
       const t=G.next[i];
       if(!t) continue;
-      drawPieceBox(cn,t,i*bw,0,bw,nextCv._h,i===0?cell:cell);
+      drawPieceBox(cn,t,i*bw,0,bw,nextCv._h,cell);
     }
   }
 }
