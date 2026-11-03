@@ -423,6 +423,13 @@ test('restart shortcut repeats are ignored', async () => {
     return __YT.G.score;
   }), 123);
 });
+test('difficulty chip labels stay on one line on a short narrow viewport', async () => {
+  await page.setViewportSize({width: 375, height: 568});
+  await page.evaluate(() => { __YT.sizeAll(); return document.fonts.ready; });
+  assert.equal(await page.evaluate(() => [...document.querySelectorAll('.chip')]
+    .every(c => c.getBoundingClientRect().height < 44)), true);   // one line is ~37px, wrapped ~52px
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+});
 for (const [width, height] of [[620, 700], [844, 390], [1024, 600]]) {
   test(`landscape layout ${width}x${height} does not overflow horizontally`, async () => {
     await page.setViewportSize({width, height});

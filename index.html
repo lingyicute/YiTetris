@@ -280,11 +280,11 @@ html[data-theme="light"] .overlay{background:hsl(var(--h) 40% 96% / .58)}
 .mini b{display:block;font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:1px}
 
 /* ============ 难度 ============ */
-.diff{grid-area:diff;display:flex;gap:8px;flex-wrap:wrap}
+.diff{grid-area:diff;display:flex;gap:8px;flex-wrap:wrap;container-type:inline-size}
 .chip{
   flex:1 1 0;min-width:74px;display:inline-flex;align-items:center;justify-content:center;gap:5px;
   padding:11px 10px;border-radius:var(--r-md);border:1.5px solid var(--line);background:transparent;color:var(--text);
-  font-size:14px;font-weight:800;letter-spacing:.5px;cursor:pointer;
+  font-size:14px;font-weight:800;letter-spacing:.5px;cursor:pointer;white-space:nowrap;
   transition:background .22s var(--ease),border-color .22s var(--ease),color .22s var(--ease),transform .16s var(--ease);
 }
 .chip:hover{background:var(--surface)}
@@ -292,6 +292,9 @@ html[data-theme="light"] .overlay{background:hsl(var(--h) 40% 96% / .58)}
 .chip .tick{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2.8;stroke-linecap:round;stroke-linejoin:round;display:none}
 .chip.on{background:var(--accent-soft);border-color:transparent;color:var(--accent-soft-text)}
 .chip.on .tick{display:block}
+/* 行宽被压到最小棋盘宽（矮屏）时，勾选图标会把选中项的文字挤成两行并撑高整行；
+   此时只靠底色与 aria-pressed 表示选中 */
+@container (max-width:270px){ .chip.on .tick{display:none} }
 
 /* ============ 触屏按键 ============ */
 .touch-pad{grid-area:pad;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
